@@ -52,3 +52,13 @@ Revision history for Perl extension Apache::GD::Graph.
 	  cache.
 	- Improved error handling again.
 	- Now know how to make graphs without axes, see man page.
+
+0.8	Mon Oct  9 22:44:05 PDT 2000
+	- Since 0.7, the default for the X axis is to NOT have any labels.
+	- The "expires" parameter didn't really work, fixed.
+	- The parameter cache=0 in the query string still hit the cache if the
+	  image was already there, fixed.
+	- Was checking for "Accepts" header, when needed to check for "Accept"
+	  header.
+	- Now checking for set_XXX methods as options, so methods like
+	  set_legend(), set_font(), etc will work.

@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.7 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.8 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
@@ -28,7 +28,8 @@ In httpd.conf:
 
 Then send requests to:
 
-C<http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
+	http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&
+	data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
 
 =head1 INSTALLATION
 
@@ -43,7 +44,9 @@ with the chart creation process abstracted and placed on any server.
 
 For example, embedding a pie chart can be as simple as:
 
-	<img src="http://www.some-server.com/chart?type=pie&x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]" alt="pie chart of a few deadly sins">
+	<img src="http://www.some-server.com/chart?type=pie&
+	x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]"
+	alt="pie chart of a few deadly sins">
 	<!-- Note that all of the above options are optional except for data1!  -->
 
 And it gets cached both server side, and along any proxies to the client, and
@@ -99,7 +102,7 @@ Same as C<PerlSetVar ImageType>. "png" by default, but can be anything
 supported by GD.
 
 If not specified via this option or in the config file, the image type can also
-be deduced from a single value in the 'Accepts' header of the request.
+be deduced from a single value in the 'Accept' header of the request.
 
 =item B<jpeg_quality>
 
@@ -133,8 +136,8 @@ times with N increasing.
 
 =back
 
-ALL OTHER OPTIONS are passed as a hash to the GD::Graph set method using the
-following rules for the values:
+ALL OTHER OPTIONS are passed to the corresponding set_<option> method, or the
+set(<option hash>) method using the following rules for the values:
 
 =over 8
 
@@ -224,19 +227,18 @@ EOF
 # Calculate Expires header based on either an "expires" parameter, the Expires
 # configuration variable (via PerlSetVar) or the EXPIRES constant, in days.
 # Then convert into seconds and round to an integer.
-		my $expires = +$args{expires} ||
-			      +$r->dir_config('Expires') ||
-			      EXPIRES;
+		my $expires = exists $args{expires} ? $args{expires} :
+			      $r->dir_config('Expires') || EXPIRES;
 
 		$expires   *= 24 * 60 * 60;
 		$expires    = sprintf ("%d", $expires);
 
 # Determine the type of image that the graph should be.
-# Allow an Accepts: header with one specific image type to set it, a
+# Allow an Accept: header with one specific image type to set it, a
 # PerlSetVar, or the image_type parameter.
 		my $image_type = lc($r->dir_config('ImageType')) || IMAGE_TYPE;
 
-		my $accepts_header = $r->header_in('Accepts');
+		my $accepts_header = $r->header_in('Accept');
 		if (defined $accepts_header and
 		    $accepts_header =~ m!^\s*image/(\w+)\s*$!) {
 			my $image_type = $1;
@@ -257,29 +259,35 @@ EOF
 					$r->dir_config('JpegQuality');
 		}
 
-		my $cache_size = $r->dir_config('CacheSize');
 		my $image_cache;
 
-		unless (defined $cache_size and $cache_size != 0) {
-			$image_cache = new File::Cache ( {
-				namespace	=> 'Images',
-				max_size	=> $cache_size || CACHE_SIZE,
-				filemode	=> 0660
-			} );
+		unless (exists $args{cache} and $args{cache} != 0) {
+			my $cache_size = $r->dir_config('CacheSize');
 
-			if (my $cached_image = $image_cache->get($args)) {
-				$r->header_out (
-					"Expires" => time2str(time + $expires)
-				);
-				$r->send_http_header("image/$image_type");
-				$r->print($cached_image);
+			unless (defined $cache_size and $cache_size != 0) {
+				$image_cache = new File::Cache ( {
+					namespace	=> 'Images',
+					max_size	=> $cache_size ||
+								CACHE_SIZE,
+					filemode	=> 0660
+				} );
 
-				return OK;
+				if (my $cached_image =
+				    $image_cache->get($args)) {
+					$r->header_out (
+						"Expires" => time2str (
+							time + $expires
+						)
+					);
+					$r->send_http_header (
+						"image/$image_type"
+					);
+					$r->print($cached_image);
+
+					return OK;
+				}
 			}
 		}
-
-		$image_cache = undef if exists $args{cache} and
-					not $args{cache};
 
 		my $type   = delete $args{type}   || 'lines';
 		my $width  = delete $args{width}  || 400;
@@ -357,6 +365,10 @@ EOF
 			if ($type == TYPE_URL) {
 				push @cleanup_files, $args{$option};
 			}
+
+			if (my $method = $graph->can("set_$option")) {
+				$graph->$method($value);
+			}
 		};
 
 		$graph->set(%args);
@@ -381,7 +393,7 @@ EOF
 		$image_cache->set($args, $image) if defined $image_cache;
 
 	}; if ($@) {
-		$r->log_error (__PACKAGE__.': '.$r->the_request.': '.$@);
+		$r->log_reason (__PACKAGE__.': '.$r->the_request.': '.$@);
 	}
 
 	if (@cleanup_files) {
@@ -429,7 +441,7 @@ sub parse ($;$) {
 
 		my ($url, $file_name) = ($_, $_);
 		$file_name =~ s|/|\%2f|g;
-		$file_name = $dir."/".$file_name;
+		$file_name = $dir."/".$file_name.$$;
 
 		my $file = new IO::File "> ".$file_name or
 			error "Could not open $file_name for writing: $!";
@@ -510,6 +522,7 @@ Probably a few.
 =head1 TODO
 
 If possible, a comprehensive test suite.
+
 Make it faster?
 
 =head1 SEE ALSO

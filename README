@@ -22,9 +22,8 @@ SYNOPSIS
 
     Then send requests to:
 
-    `http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4t
-    h,5th]&data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,g
-    reen]'
+            http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&
+            data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
 
 INSTALLATION
     Like any other CPAN module, if you are not familiar with CPAN
@@ -39,7 +38,9 @@ DESCRIPTION
 
     For example, embedding a pie chart can be as simple as:
 
-            <img src="http://www.some-server.com/chart?type=pie&x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]" alt="pie chart of a few deadly sins">
+            <img src="http://www.some-server.com/chart?type=pie&
+            x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]"
+            alt="pie chart of a few deadly sins">
             <!-- Note that all of the above options are optional except for data1!  -->
 
     And it gets cached both server side, and along any proxies to
@@ -86,7 +87,7 @@ OPTIONS
 
             If not specified via this option or in the config file,
             the image type can also be deduced from a single value
-            in the 'Accepts' header of the request.
+            in the 'Accept' header of the request.
 
     jpeg_quality
             Same as `PerlSetVar JpegQuality'. A number from 0 to 100
@@ -112,8 +113,9 @@ OPTIONS
     dataN   Values to plot, where N is a number starting with 1. Can be
             given any number of times with N increasing.
 
-    ALL OTHER OPTIONS are passed as a hash to the GD::Graph set
-    method using the following rules for the values:
+    ALL OTHER OPTIONS are passed to the corresponding set_<option>
+    method, or the set(<option hash>) method using the following
+    rules for the values:
 
     undef   Becomes a real undef.
 
@@ -161,7 +163,9 @@ BUGS
     Probably a few.
 
 TODO
-    If possible, a comprehensive test suite. Make it faster?
+    If possible, a comprehensive test suite.
+
+    Make it faster?
 
 SEE ALSO
     the perl manpage, the GD::Graph manpage, the GD manpage
