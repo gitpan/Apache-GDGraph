@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.2 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.3 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
@@ -10,16 +10,16 @@ Apache::GD::Graph - Generate Charts in an Apache handler.
 
 In httpd.conf:
 
-PerlModule Apache::GD::Graph
+	PerlModule Apache::GD::Graph
 
-<Location /chart>
-SetHandler perl-script
-PerlHandler Apache::GD::Graph
-</Location>
+	<Location /chart>
+	SetHandler perl-script
+	PerlHandler Apache::GD::Graph
+	</Location>
 
 Then send requests to:
 
-http://www.your-server.com/chart?type=lines&x_labels=1st,2nd,3rd,4th,5th&x_values=1,2,3,4,5&y_values=6,7,8,9,10
+C<http://www.your-server.com/chart?type=lines&x_labels=1st,2nd,3rd,4th,5th&data1=1,2,3,4,5&data2=6,7,8,9,10>
 
 =head1 DESCRIPTION
 
@@ -59,13 +59,10 @@ For the following three, look at the plot method in L<GD::Graph(3)>.
 Labels used on the X axis, the first array given to the plot method of
 GD::Graph.
 
-=item B<x_values>
+=item B<dataN>
 
-Values to plot for x.
-
-=item B<y_values>
-
-Values to plot for y.
+Values to plot, where N is a number starting with 1. Can be given any number of
+times with N increasing.
 
 =back
 
@@ -84,18 +81,21 @@ use GD::Graph::linespoints;
 use GD::Graph::area;
 use GD::Graph::mixed;
 use GD::Graph::pie;
+use Data::Dumper;
 
 use constant THIRTY_DAYS => 60*60*24*30;
 use constant DIR         => "/tmp/graph-$$/";
 
-# Create directory on load.
-mkdir DIR, 0777;
-chown Apache->server->uid, Apache->server->gid, DIR;
+# Create directory on load, unless this isn't really Apache.
+if (Apache->can('server') && ! -d DIR) {
+	mkdir DIR, 0777;
+	chown Apache->server->uid, Apache->server->gid, DIR;
+}
 
 # And delete on process exit.
 END {
 	if (-d DIR) {
-		system "rm -rf ".DIR;
+		system "rm -rf ".DIR." 2>&1";
 	}
 }
 
@@ -120,12 +120,13 @@ sub handler {
 
 	my $x_labels = [ split /,/, delete $args{x_labels} ]
 		|| [ qw( 1st 2nd 3rd 4th 5th ) ];
-
-	my $x_values = [ split /,/, delete $args{x_values} ]
-		|| [1..5];
-
-	my $y_values = [ split /,/, delete $args{y_values} ]
-		|| [1..5];
+	
+	my @data;
+	my $key = "data1";
+	while (exists $args{$key}) {
+		push @data, [ split /,/, delete $args{$key} ];
+		$key++;
+	}
 
 	my $graph;
 	eval {
@@ -140,7 +141,7 @@ sub handler {
 
 	$graph->set(%args);
 
-	my $image = $graph->plot([$x_labels, $x_values, $y_values])->png;
+	my $image = $graph->plot([$x_labels, @data])->png;
 	$r->header_out("Expires" => time2str(time + THIRTY_DAYS));
 	$r->send_http_header("image/png");
 	$r->print($image);

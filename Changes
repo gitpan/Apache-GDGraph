@@ -1,6 +1,12 @@
 Revision history for Perl extension Apache::GD::Graph.
 
-0.01  Tue Aug  1 15:40:42 2000
+0.01	Tue Aug  1 15:40:42 2000
 	- original version; created by h2xs 1.20 with options
 		-A -X -n Apache::GD::Graph
 
+0.02	Wed Aug  2	    2000
+	- Fixed ABSTRACT in Makefile.PL and MANIFEST.
+
+0.03	Thu Aug  3 15:30:03 PDT 2000
+	- Plots y values for any number of arrays (I misunderstood the
+	  GD::Graph manpage). Fixed syntax and documentation to reflect this.
