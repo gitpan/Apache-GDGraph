@@ -4,5 +4,4 @@ Makefile.PL
 lib/Apache/GD/Graph.pm
 MANIFEST
 t/README
-t/load.t
 t/simple_request.t

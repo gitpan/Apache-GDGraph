@@ -1,4 +1,3 @@
 Script          	Testing...
 -----------------------------------------------------------------------------
-load.t			Module loads.
 simple_request.t	Test drawing a simple line graph.

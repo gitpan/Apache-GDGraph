@@ -7,39 +7,40 @@ SYNOPSIS
             <Location /chart>
             SetHandler      perl-script
             PerlHandler     +Apache::GD::Graph
-            # These are optional.
-            #PerlSetVar     Expires         30      # days default.
-            #PerlSetVar     CacheSize       5242880 # 5 megs default.
-            #PerlSetVar     ImageType       png     # Default.
-            # The default image type that graphs should be.
-            # png is default, gif requires <= GD 1.19.
-            # Any type supported by the installed version of GD will work.
+            ## These are optional (defaults shown)
+            ##                              In days:
+            #PerlSetVar     Expires         30
             #
-            # The next specifies the quality of generated JPEG images, best not to
-            # specify this one and let GD figure it out.
+            ##                              In megs:
+            #PerlSetVar     CacheSize       5242880
+            #PerlSetVar     ImageType       png
             #PerlSetVar     JpegQuality     75 # 0 to 100
-            # TTFFontPath tells GD::Text where to look for true type fonts. The
-            # example here is the default value used.
-            #PerlSetVar     TTFFontPath     /usr/ttfonts:/var/ttfonts:/usr/X11R6/lib/X11/fonts/ttf/:/usr/X11R6/lib/X11/fonts/truetype/:/usr/share/fonts/truetype
+            #PerlSetVar     TTFFontPath     /usr/ttfonts:
+            #/var/ttfonts:/usr/X11R6/lib/X11/fonts/ttf/:
+            #/usr/X11R6/lib/X11/fonts/truetype/:
+            #/usr/share/fonts/truetype
             </Location>
 
     Then send requests to:
 
-            http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&
-            data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
+            http://www.server.com/chart?type=lines&
+            x_labels=[1st,2nd,3rd,4th,5th]&
+            data1=[1,2,3,4,5]&
+            data2=[6,7,8,9,10]&
+            dclrs=[blue,yellow,green]>
 
     Options can also be sent as x-www-form-urlencoded data (ie., a
-    form). This works better for large data sets, and allows simple
-    charting forms to be set up. IE, for example, does not allow query
-    strings larger than a kilobyte. Parameters in the query string take
-    precedence over a form if specified.
+    form). This allows simple charting forms to be set up, also,
+    Internet Explorer does not allow query strings larger than a
+    kilobyte so in those cases a POSTED form must be used. Parameters in
+    the query string take precedence over a form if specified.
 
 INSTALLATION
     Like any other CPAN module, if you are not familiar with CPAN
     modules, see:
     http://www.cpan.org/doc/manual/html/pod/perlmodinstall.html
 
-    MAKE SURE TO RESTART YOUR APACHE SERVER using `apachectl graceful'
+    MAKE SURE TO RESTART YOUR APACHE SERVER using "apachectl graceful"
     after upgrading this or any other Apache Perl module.
 
 DESCRIPTION
@@ -51,9 +52,10 @@ DESCRIPTION
     For example, embedding a pie chart can be as simple as:
 
             <img src="http://www.some-server.com/chart?type=pie&
-            x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]"
+            x_labels=[greed,pride,wrath]&data1=[10,50,20]&
+            dclrs=[green,purple,red]"
             alt="pie chart of a few deadly sins">
-            <!-- Note that all of the above options are optional except for data1!  -->
+            <!-- All above options are optional except for data1 -->
 
     And it gets cached both server side, and along any proxies to the
     client, and on the client's browser cache. Not to mention, chart
@@ -76,20 +78,37 @@ TIPS
     interface.
 
     Firstly, make sure you are not using any spaces! If you want to pass
-    a space in a parameter in a URL-encoded string, use `%20', in a form
-    use a `+'.
+    a space in a parameter in a URL-encoded string, use %20, in a form
+    use a "+".
 
-    Make sure to use `cache=0' or `PerlSetVar CacheSize 0' when
+    Make sure to use "cache=0" or "PerlSetVar CacheSize 0" when
     debugging, otherwise you will spend hours being very confused.
 
 FONTS
     GD::Graph has some options that take a font description, such as
     title_font, legend_font, etc. (these map to the appropriate set_FOO
-    methods in GD::Graph, see that manpage). See the TTFFontPath
-    variable under SYNOPSIS for how to set the search path for fonts.
-    MAKE SURE your fonts are readable by the user the Apache server runs
-    under, this is usually "www-data" or "nobody". Otherwise your fonts
-    will mysteriously fail with no notice.
+    methods in GD::Graph, see that manpage).
+
+    The following fonts are built-in to GD, these strings will resolve
+    into the appropriate fonts except when quoted:
+
+    gdSmallFont, gdLargeFont, gdMediumBoldFont, gdTinyFont, gdGiantFont
+
+    There is also a way to use your own True Type Fonts. See the
+    TTFFontPath variable under SYNOPSIS for how to set the search path
+    for fonts. MAKE SURE your fonts are readable by the user the Apache
+    server runs under, this is usually "www-data" or "nobody". Otherwise
+    your fonts will mysteriously fail with no notice.
+
+    Fonts can also be specified as a relative path to the DocumentRoot
+    of the server, these must begin with "../". For example, if you have
+    a directory "fonts" under DocumentRoot, then you might specify a
+    font like so:
+
+            ../fonts/arial.ttf
+
+    If DocumentRoot happens to be "/var/www" then the font that will be
+    looked up is "/var/www/fonts/arial.ttf".
 
     Sizes can be specified by using a list with the name and size. For
     example, if arial.ttf can be found somewhere in your TTFFontPath,
@@ -100,54 +119,65 @@ FONTS
     To get a title using font Arial, in 20 points.
 
     Note that GD::Text does not parse out the names of fonts and such,
-    you have to give it an actual filename, in the right case. So if
-    using the Microsoft Windows core fonts, Arial Bold would be
-    `arialbd.ttf'. Here's an example:
+    you have to give it an actual filename, matches are
+    case-insensitive. So if using the Microsoft Windows core fonts,
+    Arial Bold would be "arialbd.ttf". Here's an example:
 
-            http://server/chart?data1=[1,2,3,4,5]&title_font=(arialbd.ttf,20)&title=Just%20A%20Line
+            http://server/chart?data1=[1,2,3,4,5]&
+            title_font=(arialbd.ttf,20)&
+            title=Just%20A%20Line
+
+COLORS
+    All colors, including those specified for the captionN option, are
+    specified using the colour names from GD::Graph::colour. They are,
+    at time of writing:
+
+    white, lgray, gray, dgray, black, lblue, blue, dblue, gold, lyellow,
+    yellow, dyellow, lgreen, green, dgreen, lred, red, dred, lpurple,
+    purple, dpurple, lorange, orange, pink, dpink, marine, cyan, lbrown,
+    dbrown.
 
 IMAGES
-    You can place a logo in any corner of the graph using the `logo',
-    `logo_resize' and `logo_position' options. See the GD::Graph
-    manpage. If you just want a background image that is resized to fit
-    your graph, see the `background_image' option herein.
+    You can place a logo in any corner of the graph using the "logo",
+    "logo_resize" and "logo_position" options. See GD::Graph. If you
+    just want a background image that is resized to fit your graph, see
+    the "background_image" option herein.
 
 TEXT/CAPTIONS
     The following GD::Graph options control placing text on the graph:
-    title, x_label and y_label. the GD::Graph manpage for those and
-    related options. In addition, this modules allows you to use the
-    captionN option(s), to draw arbitrary strings on the graph. See
-    below.
+    title, x_label and y_label. GD::Graph for those and related options.
+    In addition, this modules allows you to use the captionN option(s),
+    to draw arbitrary strings on the graph. See below.
 
 IMPLEMENTATION
     This module is implemented as a simple Apache mod_perl handler that
     generates and returns a png format graph (using Martien Verbruggen's
     GD::Graph module) based on the arguments passed in via a query
     string. It responds with the content-type "image/png" (or whatever
-    is set via `PerlSetVar ImageType'), and sends a Expires: header of
-    30 days (or whatever is set via `PerlSetVar Expires', or expires in
+    is set via "PerlSetVar ImageType"), and sends a Expires: header of
+    30 days (or whatever is set via "PerlSetVar Expires", or expires in
     the query string, in days) ahead.
 
     In addition, it keeps a server-side cache in the file system using
     DeWitt Clinton's File::Cache module, whose size can be specified via
-    `PerlSetVar CacheSize' in bytes.
+    "PerlSetVar CacheSize" in bytes.
 
 OPTIONS
     type    Type of graph to generate, can be lines, bars, points,
             linespoints, area, mixed, pie. For a description of these,
-            see the GD::Graph(3) manpage. Can also be one of the 3d
-            types if GD::Graph3d is installed, or anything else with
-            prefix GD::Graph::.
+            see GD::Graph(3). Can also be one of the 3d types if
+            GD::Graph3d is installed, or anything else with prefix
+            GD::Graph::.
 
     width   Width of graph in pixels, 400 by default.
 
     height  Height of graph in pixels, 300 by default.
 
     expires Date of Expires header from now, in days. Same as
-            `PerlSetVar Expires'.
+            "PerlSetVar Expires".
 
     image_type
-            Same as `PerlSetVar ImageType'. "png" by default, but can be
+            Same as "PerlSetVar ImageType". "png" by default, but can be
             anything supported by GD.
 
             If not specified via this option or in the config file, the
@@ -155,7 +185,7 @@ OPTIONS
             'Accept' header of the request.
 
     jpeg_quality
-            Same as `PerlSetVar JpegQuality'. A number from 0 to 100
+            Same as "PerlSetVar JpegQuality". A number from 0 to 100
             that determines the jpeg quality and the size. If not set at
             all, the GD library will determine the optimal setting.
             Changing this value doesn't seem to do much as far as line
@@ -165,7 +195,7 @@ OPTIONS
             Set an image as the background for the graph. You are
             responsible for choosing a sane image to go with your graph,
             the background should be either transparent or the same
-            color you will use. This is the same as using the `logo'
+            color you will use. This is the same as using the "logo"
             parameter with an image of the same size as the graph,
             except this option will resize the image if necessary,
             making it more convenient for this purpose. The file or URL
@@ -174,31 +204,61 @@ OPTIONS
     captionN
             Draws a character string using a TrueType font at an
             arbitrary location. Takes an array of
-            `($fgcolor,$fontname,$ptsize,$angle,$x,$y,$string)' where
-            $fgcolor is the foreground color, $fontname is the name of a
-            TTF font see the FONTS entry elsewhere in this document ,
-            $ptsize is the point size, $x and $y are the coordinates,
-            and $string is the actual characters to draw.
+            "($fgcolor,$fontname,$ptsize,$angle,$x,$y,$string[,$box_colo
+            r,$box_offset])" where $fgcolor is the foreground color,
+            $fontname is the name of a TTF font see "FONTS" , $ptsize is
+            the point size, $x and $y are the coordinates, and $string
+            is the actual characters to draw.
+
+            $box_color and $box_offset are optional parameters, if set
+            the caption will be drawn with a box around it in that color
+            and that distance from the caption string. The default
+            offset of 9 should work well in most cases.
 
             N is an integer from 1 onward, like for the dataN option.
             This lets you specify multiple strings to draw.
 
-            This follows exactly the GD stringTTF method, see the GD
-            manpage.
+            Note: you cannot use builtin GD fonts like gdTinyFont for
+            captions, you have to use a real TTF font.
 
-            Angle is in degrees, you will primarily use angle `0' for
+            This uses the GD stringTTF method, see GD. Colour names are
+            indexed using the GD::Graph::colour builtins (see above),
+            fonts are resolved by font path or relative to DocumentRoot,
+            parameters are processed as per "DATA TYPES".
+
+            Angle is in degrees, you will primarily use angle 0 for
             normal left-to-right text. $x and $y are pixel coordinates
             from the upper left corner. $fontname is the name of a
-            true-type font that will be found in the font path (see
-            FONTS). Example:
+            true-type font that will be found in the font path "FONTS".
+            Example:
 
-                    http://isis/chart?data1=[1,2,3,4,5]&caption1=(1,arial.ttf,9,0,30,30,Hello)
+                    http://isis/chart?data1=[1,2,3,4,5]&
+                    caption1=(1,arial.ttf,9,0,30,30,Hello,red)
+
+            To draw the box around the caption as a dashed or dotted
+            line use:
+
+    gd_set_style
+            This option sets the style for the special gdStyled color
+            index. It's simply a list of colors that becomes the pattern
+            for lines and such drawn with it. For example, to get a
+            dashed red line:
+
+                    gd_set_style=(red,red,red,red,red,red,
+                    gdTransparent,gdTransparent,
+                    gdTransparent,gdTransparent);
+
+            The list can be arbitrarily long.
+
+            Note: at this time, the only place where you can use colors
+            of this style is for the box around a caption. Just specify
+            "gdStyled" as the color.
 
     cache   Boolean value which determines whether or not the image will
             get cached server-side (for client-side caching, use the
             "expires" parameter). It is true (1) by default. Setting
-            `PerlSetVar CacheSize 0' in the config file will achieve the
-            same affect as `cache=0' in the query string.
+            "PerlSetVar CacheSize 0" in the config file will achieve the
+            same affect as "cache=0" in the query string.
 
     to_file The graph will not be sent back, but instead saved to the
             file indicated on the server. Apache will need permission to
@@ -209,8 +269,7 @@ OPTIONS
     no_axes This sets x_labels to an empty lists and sets
             y_number_format to "", effectively disabling axes labels.
 
-    For the following, look at the plot method in the GD::Graph(3)
-    manpage.
+    For the following, look at the plot method in GD::Graph(3).
 
     x_labels
             Labels used on the X axis, the first array given to the plot
@@ -222,8 +281,9 @@ OPTIONS
 
     ALL OTHER OPTIONS are passed to the corresponding set_<option>
     method, or the set(<option hash>) method using the following rules
-    for the values:
+    for the values:jj
 
+DATA TYPES
     undef   Becomes a real undef.
 
     [one,two,3]
@@ -243,6 +303,16 @@ OPTIONS
             respective option. (Can be any scheme besides http:// that
             LWP::Simple supports.)
 
+    ../fonts/arial.ttf
+            Paths following this pattern will be interpreted as paths
+            relative to DocumentRoot of the web server.
+
+    gdSmallFont, gdLargeFont, gdMediumBoldFont, gdTinyFont, gdGiantFont,
+    gdStyled, gdBrushed, gdStyledBrushed, gdTransparent
+            These are reserved strings. If not quoted, they will be
+            converted to the builtin GD constants of the same name. See
+            GD for details.
+
     [undef,something,undef] or {key,undef}
             You can create an array or hash with undefs.
 
@@ -252,8 +322,6 @@ OPTIONS
 
             DON'T USE SPACES, this is a common mistake. A space in a
             URL-encoded string is %20, or a + in a form.
-
-            Nested structures are still not supported, maybe later.
 
 AUTHOR
     Rafael Kitover (caelum@debian.org)
@@ -282,9 +350,8 @@ BUGS
     set up. At least, it should be an option.
 
 TODO
-    Boxed captions. Variable mapping of x-labels to data points. If
-    possible, a comprehensive test suite. Make it faster?
+    Variable mapping of x-labels to data points. Better test suite.
 
 SEE ALSO
-    the perl manpage, the GD::Graph manpage, the GD manpage
+    perl, GD::Graph, GD::Graph::colour, GD
 

@@ -4,10 +4,9 @@
 use strict;
 use Apache::FakeRequest;
 use Apache::GD::Graph;
-use Benchmark;
 
 # Number of tests.
-print "1..2\n";
+print "1..1\n";
 
 my $request = new Apache::FakeRequest (
 	args => 'data1=[1,2,3,4,5]&cache=0',
@@ -52,19 +51,6 @@ if ($line1 !~ /PNG/) {
 }
 
 print "ok 1\n";
-
-print STDERR "\nTiming 100 Line Graphs, this may take a few seconds...\n";
-
-open OLDOUT, ">&STDOUT";
-open STDOUT, ">/dev/null";
-
-my $time = timeit (100, sub { Apache::GD::Graph::handler($request) });
-
-close STDOUT;
-open STDOUT, ">&OLDOUT";
-
-print STDERR "\n100 Line Graphs took ", timestr($time), " to draw.\n";
-print "ok 2\n";
 
 package Apache::FakeRequest;
 
