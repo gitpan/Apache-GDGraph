@@ -1,5 +1,9 @@
 Revision history for Perl extension Apache::GD::Graph.
 
+0.95	Mon Apr  7 15:06:53 PDT 2003
+	- Fixed a possible misreading of the CacheSize parameter reported by
+	  CPAN testers.
+
 0.94	Thu Apr  3 21:06:14 PST 2003
 	- Added compatibility with mod_perl for Apache2.
 	- Made test skip in Apache2 (too lazy to fix it right now).

@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-$VERSION = 0.94;
+$VERSION = 0.95;
 
 =head1 NAME
 
@@ -440,7 +440,9 @@ sub init() {
 # Set the GD::Text fontpath.
 	GD::Text->font_path ($r->dir_config('TTFFontPath') || TTF_FONT_PATH);
 
-	$cache_size = $r->dir_config('CacheSize') || CACHE_SIZE;
+	$cache_size = $r->dir_config('CacheSize');
+
+	$cache_size = CACHE_SIZE if $cache_size <= 0;
 
 	$image_cache = new File::Cache ({
 		namespace	=> 'Images',
