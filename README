@@ -4,6 +4,8 @@ NAME
 SYNOPSIS
     In httpd.conf:
 
+            #PerlModule Apache::compat # uncomment this in Apache2!
+
             <Location /chart>
             SetHandler      perl-script
             PerlHandler     +Apache::GD::Graph

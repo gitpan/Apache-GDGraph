@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-$VERSION = 0.93;
+$VERSION = 0.94;
 
 =head1 NAME
 
@@ -9,6 +9,8 @@ Apache::GD::Graph - Generate Graphs in an Apache handler.
 =head1 SYNOPSIS
 
 In httpd.conf:
+
+	#PerlModule Apache::compat # uncomment this in Apache2!
 
 	<Location /chart>
 	SetHandler	perl-script
@@ -457,15 +459,11 @@ sub handler ($) {
 		if $first_request;
 
 	eval {
-		my $args = scalar $r->args;
-		my %args = ($r->args);
-
-		unless ($args) {
-			$args = $r->content;
-			%args = map {
-					Apache::unescape_url_info($_)
-				} split /[=&;]/, $args, -1;
-		}
+		my $args = scalar $r->args || $r->content;
+		my %args = map {
+				s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+				$_ # unescaped
+			    } split /[=&;]/, $args, -1;
 
 		die <<EOF unless $args;
 Please supply arguments in the query string, see the Apache::GD::Graph man

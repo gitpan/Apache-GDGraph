@@ -2,11 +2,24 @@
 # vim: syntax=perl
 
 use strict;
-use Apache::FakeRequest;
-use Apache::GD::Graph;
+
+# Check for Apache::FakeRequest, skip tests otherwise
+eval "require Apache::FakeRequest;";
+if ($@) {
+	print "1..0 # Skip looks like Apache2, haven't updated test yet.\n";
+	exit;
+}
 
 # Number of tests.
-print "1..1\n";
+print "1..2\n";
+
+undef $@;
+eval "require Apache::GD::Graph;";
+if ($@) {
+	print "not ok 1\n";
+} else {
+	print "ok 1\n";
+}
 
 my $request = new Apache::FakeRequest (
 	args => 'data1=[1,2,3,4,5]&cache=0',
@@ -19,7 +32,7 @@ my $result_file = "/tmp/Apache::GD::Graph-test-$$";
 open OLDOUT, ">&STDOUT";
 open STDOUT, ">$result_file" or do {
 	print STDERR "Could not redirect STDOUT to $result_file: $!\n";
-	print "not ok 1\n";
+	print "not ok 2\n";
 	exit;
 };
 
@@ -30,13 +43,13 @@ open STDOUT, ">&OLDOUT";
 
 if ($return_val < 0) {
 	print STDERR "Handler returned unsuccessfully.\n";
-	print "not ok 1\n";
+	print "not ok 2\n";
 	exit;
 }
 
 open RESULT, $result_file or do {
 	print STDERR "Could not open $result_file: $!\n";
-	print "not ok 1\n";
+	print "not ok 2\n";
 	exit;
 };
 
@@ -46,11 +59,11 @@ unlink $result_file;
 
 if ($line1 !~ /PNG/) {
 	print STDERR "Result not a PNG file!\n";
-	print "not ok 1\n";
+	print "not ok 2\n";
 	exit;
 }
 
-print "ok 1\n";
+print "ok 2\n";
 
 package Apache::FakeRequest;
 
