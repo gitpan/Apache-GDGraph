@@ -33,3 +33,9 @@ Revision history for Perl extension Apache::GD::Graph.
 	- Beginnings of a better test suite.
 	- Just run pod2text on the module to create README, as opposed to not
 	  having a README I guess.
+
+0.6	Mon Sep  4 15:16:01 PDT 2000
+	- Got rid of all cache handling code and now using File::Cache, as I
+	  should have done in the first place.
+	- PerlSetVar CacheDir is gone (File::Cache uses its own).
+	- PerlSetVar CacheSize added (size in bytes).

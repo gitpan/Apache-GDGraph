@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.5 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.6 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
@@ -16,22 +16,41 @@ In httpd.conf:
 	SetHandler	perl-script
 	PerlHandler	Apache::GD::Graph
 	# These are optional.
-	PerlSetVar	CacheDir	/var/cache/Apache::GD::Graph
 	PerlSetVar	Expires		30 # days.
+	PerlSetVar	CacheSize	5242880 # 5 megs.
 	</Location>
 
 Then send requests to:
 
 C<http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
 
+=head1 INSTALLATION
+
+Like any other CPAN module, if you are not familiar with CPAN modules, see:
+http://www.cpan.org/doc/manual/html/pod/perlmodinstall.html .
+
 =head1 DESCRIPTION
 
-This is a simple Apache mod_perl handler that generates and returns a png
-format graph based on the arguments passed in via a query string. It responds
-with the content-type "image/png" directly, and sends a Expires: header of 30
-days ahead (since the same query string generates the same graph, they can be
-cached). In addition, it keeps a server-side cache under
-/var/cache/Apache::GD::Graph .
+The primary purpose of this module is to allow a very easy to use, lightweight
+and fast charting capability for static pages, dynamic pages and CGI scripts,
+with the chart creation process abstracted and placed on any server.
+
+For example, embedding a pie chart can be as simple as:
+
+	<img src="http://www.some-server.com/chart?type=pie&x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]" alt="pie chart of a few deadly sins">
+	<!-- Note that all of the above options are optional except for data1!  -->
+
+And it gets cached both server side, and along any proxies to the client, and
+on the client's browser cache. Not to mention, chart generation is
+very fast.
+
+It is implemented as a simple Apache mod_perl handler that generates and
+returns a png format graph (using Martien Verbruggen's GD::Graph module) based
+on the arguments passed in via a query string. It responds with the
+content-type "image/png" directly, and sends a Expires: header of 30 days (or
+whatever is set via C<PerlSetVar Expires>, in days) ahead. In addition, it
+keeps a server-side cache in the file system using DeWitt Clinton's File::Cache
+module, whose size can be specified via C<PerlSetVar CacheSize> in bytes.
 
 =head1 OPTIONS
 
@@ -101,9 +120,10 @@ use Apache;
 use Apache::Constants qw/OK/;
 use HTTP::Date;
 use GD::Graph;
+use File::Cache;
 
-use constant EXPIRES => 30;
-use constant DIR     => "/var/cache/Apache::GD::Graph";
+use constant EXPIRES	=> 30;
+use constant CACHE_SIZE	=> 5242880;
 
 use constant TYPE_UNDEF		=> 0;
 use constant TYPE_SCALAR	=> 1;
@@ -131,33 +151,27 @@ sub handler ($) {
 # Calculate Expires header based on either the Expires configuration variable
 # (via PerlSetVar) or the EXPIRES constant, in days. Then convert into seconds
 # and round to an integer.
-		my $expires =
-			$r->dir_config('Expires') || EXPIRES;
+		my $expires = 0+($r->dir_config('Expires')) || EXPIRES;
 		$expires   *= 24 * 60 * 60;
 		$expires    = sprintf ("%d", $expires);
 
-# Determine the cache directory, if different from default.
-		my $dir = $r->dir_config('CacheDir') || DIR;
-		makeDir $dir unless -d $dir;
+		my $image_cache = new File::Cache ( {
+			namespace	=> 'Images',
+			max_size	=> 0+($r->dir_config('CacheSize')) ||
+					   CACHE_SIZE,
+			filemode	=> 0660
+		} );
 
-		my $cached_name    = $r->args;
-		if (defined $cached_name) {
-			$cached_name    =~ s|/|\%2f|g;
-			$cached_name    = $dir."/".$cached_name.".png";
+		my $params = scalar $r->args;
 
-			if (-e $cached_name) {
-				local $/ = undef;
-				$r->header_out (
-					"Expires" => time2str(time + $expires)
-				);
-				$r->send_http_header("image/png");
-# Slurp the whole thing out.
-				{
-					local (@ARGV,$/) = $cached_name;
-					$r->print(<>)
-				}
-				return OK;
-			}
+		if (my $cached_image = $image_cache->get($params)) {
+			$r->header_out (
+				"Expires" => time2str(time + $expires)
+			);
+			$r->send_http_header("image/png");
+			$r->print($cached_image);
+
+			return OK;
 		}
 
 		my %args = $r->args;
@@ -217,7 +231,7 @@ sub handler ($) {
 		}
 
 		for my $option (keys %args) {
-			my ($value, $type) = parse ($args{$option}, $dir);
+			my ($value, $type) = parse ($args{$option});
 			$args{$option}	   = $value;
 
 			if ($type == TYPE_URL) {
@@ -232,12 +246,8 @@ sub handler ($) {
 		$r->send_http_header("image/png");
 		$r->print($image);
 
-		my $cache = new IO::File ">$cached_name"
-		 or error "Could not open $cached_name for writing: $!";
+		$image_cache->set($params, $image);
 
-		binmode $cache;	# For win32 compatability.
-		print $cache $image;
-		close $cache;
 	}; if ($@) {
 		$r->log_error (__PACKAGE__.': '.$@);
 	}
@@ -313,30 +323,6 @@ EOF
 	die $message;
 }
 
-# Make a directory owned by the Apache process.
-sub makeDir ($) {
-	use File::Path;
-
-	my $dir = shift;
-	mkpath $dir;
-	chmod 0755, $dir;
-# This is necessary in cases such as when the parent Apache server is running
-# as root, but requests are handled under a different uid/gid.
-	if (my $server = Apache->can('server')) {
-		chown Apache->$server()->uid,
-		      Apache->$server()->gid, $dir;
-	}
-}
-
-# Make sure the default directory exists when the parent Apache process starts.
-# Since it is often owned by root, it has a good chance of being able to create
-# this directory.
-sub BEGIN {
-	if (!-d DIR && $Apache::Server::Starting) {
-		makeDir DIR;
-	}
-}
-
 1;
 
 __END__
@@ -367,13 +353,13 @@ Probably a few.
 
 =head1 TODO
 
-Perhaps using mod_proxy for caching entirely, or improving this scheme to be
-more intelligent and clean up after itself.
+More extensive test suite.
+Need to be easily able to generate graphs without axes.
 
 =head1 SEE ALSO
 
-L<perl(1)>,
-L<GD::Graph(3)>,
-L<GD(3)>,
+L<perl>,
+L<GD::Graph>,
+L<GD>
 
 =cut

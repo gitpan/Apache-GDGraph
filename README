@@ -10,8 +10,8 @@ SYNOPSIS
             SetHandler      perl-script
             PerlHandler     Apache::GD::Graph
             # These are optional.
-            PerlSetVar      CacheDir        /var/cache/Apache::GD::Graph
             PerlSetVar      Expires         30 # days.
+            PerlSetVar      CacheSize       5242880 # 5 megs.
             </Location>
 
     Then send requests to:
@@ -20,14 +20,35 @@ SYNOPSIS
     h,5th]&data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,g
     reen]'
 
+INSTALLATION
+    Like any other CPAN module, if you are not familiar with CPAN
+    modules, see:
+    http://www.cpan.org/doc/manual/html/pod/perlmodinstall.html .
+
 DESCRIPTION
-    This is a simple Apache mod_perl handler that generates and
-    returns a png format graph based on the arguments passed in via
-    a query string. It responds with the content-type "image/png"
-    directly, and sends a Expires: header of 30 days ahead (since
-    the same query string generates the same graph, they can be
-    cached). In addition, it keeps a server-side cache under
-    /var/cache/Apache::GD::Graph .
+    The primary purpose of this module is to allow a very easy to
+    use, lightweight and fast charting capability for static pages,
+    dynamic pages and CGI scripts, with the chart creation process
+    abstracted and placed on any server.
+
+    For example, embedding a pie chart can be as simple as:
+
+            <img src="http://www.some-server.com/chart?type=pie&x_labels=[greed,pride,wrath]&data1=[10,50,20]&dclrs=[green,purple,red]" alt="pie chart of a few deadly sins">
+            <!-- Note that all of the above options are optional except for data1!  -->
+
+    And it gets cached both server side, and along any proxies to
+    the client, and on the client's browser cache. Not to mention,
+    chart generation is very fast.
+
+    It is implemented as a simple Apache mod_perl handler that
+    generates and returns a png format graph (using Martien
+    Verbruggen's GD::Graph module) based on the arguments passed in
+    via a query string. It responds with the content-type
+    "image/png" directly, and sends a Expires: header of 30 days (or
+    whatever is set via `PerlSetVar Expires', in days) ahead. In
+    addition, it keeps a server-side cache in the file system using
+    DeWitt Clinton's File::Cache module, whose size can be specified
+    via `PerlSetVar CacheSize' in bytes.
 
 OPTIONS
     type    Type of graph to generate, can be lines, bars, points,
@@ -87,10 +108,9 @@ BUGS
     Probably a few.
 
 TODO
-    Perhaps using mod_proxy for caching entirely, or improving this
-    scheme to be more intelligent and clean up after itself.
+    More extensive test suite. Need to be easily able to generate
+    graphs without axes.
 
 SEE ALSO
-    the perl(1) manpage, the GD::Graph(3) manpage, the GD(3)
-    manpage,
+    the perl manpage, the GD::Graph manpage, the GD manpage
 

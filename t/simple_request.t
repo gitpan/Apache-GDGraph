@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl
 # vim: syntax=perl
 
 use strict;
@@ -48,11 +48,8 @@ unlink $result_file;
 
 if ($line1 !~ /PNG/) {
 	print STDERR "Result not a PNG file!\n";
-	print STDERR "line1 is: $line1";
 	print "not ok 1\n";
 	exit;
 }
 
 print "ok 1\n";
-
-system "rm -rf CacheDir"
