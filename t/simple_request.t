@@ -82,4 +82,13 @@ sub dir_config {
 	return $self->{dir_config}{$key};
 }
 
+BEGIN {
+	unless (defined eval "Apache::FakeRequest::server_admin()") {
+		no strict 'refs';
+		*{'Apache::FakeRequest::server_admin'} = sub {
+			return "root\@localhost";
+		};
+	}
+}
+
 1;

@@ -1,5 +1,11 @@
 Revision history for Perl extension Apache::GD::Graph.
 
+0.96	Tue Apr  8 19:34:59 PDT 2003
+	- Fixed another reported error in the test, would have been simpler to
+	  not write one in the first place.
+	- Fixed a bug where the module was trying to delete IO::File objects
+	  instead of the underlying file names.
+
 0.95	Mon Apr  7 15:06:53 PDT 2003
 	- Fixed a possible misreading of the CacheSize parameter reported by
 	  CPAN testers.

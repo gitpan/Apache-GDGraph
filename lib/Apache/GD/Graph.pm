@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-$VERSION = 0.95;
+$VERSION = 0.96;
 
 =head1 NAME
 
@@ -810,7 +810,7 @@ EOF
 
 		print $file $contents;
 
-		push @cleanup_files, $file;
+		push @cleanup_files, $file_name;
 
 		return (TYPE_URL, $file_name);
 	} elsif (s!^\.\./!!) {
