@@ -259,9 +259,9 @@ AUTHOR
     Rafael Kitover (caelum@debian.org)
 
 COPYRIGHT
-    This program is Copyright (c) 2000 by Rafael Kitover. This program
-    is free software; you can redistribute it and/or modify it under the
-    same terms as Perl itself.
+    This program is Copyright (c) 2000,2001 by Rafael Kitover. This
+    program is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
 
 ACKNOWLEDGEMENTS
     This module owes its existance, obviously, to the availability of
@@ -271,8 +271,8 @@ ACKNOWLEDGEMENTS
     Thanks to my employer, Gradience, Inc., for allowing me to work on
     projects as free software.
 
-    Thanks to Vivek Khera (khera@kciLink.com) and Scott Holdren
-    <scott@monsterlabs.com> for the bug fixes.
+    Thanks to Vivek Khera, Scott Holdren and Drew Negentesh for the bug
+    fixes.
 
 BUGS
     Probably a few.

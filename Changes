@@ -70,7 +70,7 @@ Revision history for Perl extension Apache::GD::Graph.
 	- Added a to_file parameter, if set the generated graph will be saved
 	  to the destination file on the server.
 
-0.10	Tue Feb  6 16:37:56 PST 2001
+0.91	Tue Feb  6 16:37:56 PST 2001
 	- Added a background_image option to make it simpler to add background
 	  images to graphs.
 	- Added no_axes parameter.
@@ -83,3 +83,8 @@ Revision history for Perl extension Apache::GD::Graph.
 	- Fixed exceptions, for the last time I hope.
 	- Added support for captions at arbitrary locations in the graph, with
 	  any font.
+
+0.92	Tue Apr 24 11:36:19 PDT 2001
+	- Previous versions couldn't handle more than 9 arguments because of a
+	  silly string increment bug :) Thanks to Drew Degentesh for pointing
+	  this out.

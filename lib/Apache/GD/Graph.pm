@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-$VERSION = 0.91;
+$VERSION = 0.92;
 
 =head1 NAME
 
@@ -427,7 +427,8 @@ EOF
 		$type = $1;	# untaint it!
 
 		my @data;
-		my $key = "data1";
+		my $ctr = 1;
+		my $key = "data$ctr";
 		while (exists $args{$key}) {
 			my ($type, $array, @rest) = (parse delete $args{$key});
 			if ($type == TYPE_LIST) {
@@ -435,7 +436,7 @@ EOF
 			}
 			arrayCheck $key, $array;
 			push @data, $array;
-			$key++;
+			$key = "data".(++$ctr);
 		}
 
 		die "Please supply at least a data1 argument."
@@ -535,7 +536,8 @@ EOF
 
 # Check if we need to draw captions, draw them after graph is plotted.
 		my @captions;
-		$key = "caption1";
+		$ctr = 1;
+		$key = "caption$ctr";
 		while (exists $args{$key}) {
 			die <<EOF unless UNIVERSAL::isa($args{$key}, 'ARRAY');
 Caption must be an array. See the Apache::GD::Graph man page or the StringTTF
@@ -543,7 +545,7 @@ method in the GD man page for details.
 EOF
 			push @captions, $args{$key};
 			delete $args{$key};
-			$key++;
+			$key = "caption".(++$ctr);
 		}
 
 		$graph->set(%args);
@@ -742,7 +744,7 @@ Rafael Kitover (caelum@debian.org)
 
 =head1 COPYRIGHT
 
-This program is Copyright (c) 2000 by Rafael Kitover. This program is free
+This program is Copyright (c) 2000,2001 by Rafael Kitover. This program is free
 software; you can redistribute it and/or modify it under the same terms as Perl
 itself.
 
@@ -754,8 +756,7 @@ GD::Graph module from Martien Verbruggen <mgjv@comdyn.com.au>.
 Thanks to my employer, Gradience, Inc., for allowing me to work on projects
 as free software.
 
-Thanks to Vivek Khera (khera@kciLink.com) and Scott Holdren
-<scott@monsterlabs.com> for the bug fixes.
+Thanks to Vivek Khera, Scott Holdren and Drew Negentesh for the bug fixes.
 
 =head1 BUGS
 
