@@ -1,5 +1,8 @@
+README
 Changes
 Makefile.PL
 lib/Apache/GD/Graph.pm
-test.pl
 MANIFEST
+t/README
+t/load.t
+t/simple_request.t

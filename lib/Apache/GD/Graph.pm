@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.4 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.5 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
@@ -13,8 +13,11 @@ In httpd.conf:
 	PerlModule Apache::GD::Graph
 
 	<Location /chart>
-	SetHandler perl-script
-	PerlHandler Apache::GD::Graph
+	SetHandler	perl-script
+	PerlHandler	Apache::GD::Graph
+	# These are optional.
+	PerlSetVar	CacheDir	/var/cache/Apache::GD::Graph
+	PerlSetVar	Expires		30 # days.
 	</Location>
 
 Then send requests to:
@@ -95,108 +98,157 @@ Is pulled into a file and the file name is passed to the respective option.
 
 use strict;
 use Apache;
+use Apache::Constants qw/OK/;
 use HTTP::Date;
 use GD::Graph;
 
-use constant THIRTY_DAYS => 60*60*24*30;
-use constant DIR         => "/var/cache/Apache::GD::Graph/";
+use constant EXPIRES => 30;
+use constant DIR     => "/var/cache/Apache::GD::Graph";
 
-BEGIN {
-	my $server = Apache->can('server');
+use constant TYPE_UNDEF		=> 0;
+use constant TYPE_SCALAR	=> 1;
+use constant TYPE_ARRAY		=> 2;
+use constant TYPE_HASH		=> 3;
+use constant TYPE_URL		=> 4;
 
-	if (!-d DIR && $server) {
-		system "mkdir -p ".DIR;
-		chmod 0755, DIR;
-		chown $server->uid, $server->gid, DIR;
-	}
-}
+# Sub prototypes:
 
-sub handler {
+sub handler ($);
+sub parse ($;$);
+sub error ($);
+sub makeDir ($);
+
+# Subs:
+
+sub handler ($) {
 	my $r = shift;
-	Apache->request($r);
-	my $cached_name = $r->args;
-	$cached_name    =~ s|/|\%2f|g;
-	$cached_name    = DIR."/".$cached_name.".png";
+	$r->request($r);
 
-	if (-e $cached_name) {
-		local $/ = undef;
-		$r->header_out("Expires" => time2str(time + THIRTY_DAYS));
-		$r->send_http_header("image/png");
+# Files to delete after request is processed.
+	my @cleanup_files;
+
+	eval {
+# Calculate Expires header based on either the Expires configuration variable
+# (via PerlSetVar) or the EXPIRES constant, in days. Then convert into seconds
+# and round to an integer.
+		my $expires =
+			$r->dir_config('Expires') || EXPIRES;
+		$expires   *= 24 * 60 * 60;
+		$expires    = sprintf ("%d", $expires);
+
+# Determine the cache directory, if different from default.
+		my $dir = $r->dir_config('CacheDir') || DIR;
+		makeDir $dir unless -d $dir;
+
+		my $cached_name    = $r->args;
+		if (defined $cached_name) {
+			$cached_name    =~ s|/|\%2f|g;
+			$cached_name    = $dir."/".$cached_name.".png";
+
+			if (-e $cached_name) {
+				local $/ = undef;
+				$r->header_out (
+					"Expires" => time2str(time + $expires)
+				);
+				$r->send_http_header("image/png");
 # Slurp the whole thing out.
-		{local (@ARGV,$/) = $cached_name; $r->print(<>)}
-		return 1;
-	}
+				{
+					local (@ARGV,$/) = $cached_name;
+					$r->print(<>)
+				}
+				return OK;
+			}
+		}
 
-	my %args = $r->args;
+		my %args = $r->args;
 
-	my $type   = delete $args{type}   || 'lines';
-	my $width  = delete $args{width}  || 400;
-	my $height = delete $args{height} || 300;
+		my $type   = delete $args{type}   || 'lines';
+		my $width  = delete $args{width}  || 400;
+		my $height = delete $args{height} || 300;
 
-	my $x_labels = parse (delete $args{x_labels})
-		if exists $args{x_labels};
+		$type =~ m/^(\w+)$/;
+		$type = $1;	# untaint it!
 
-	my @data;
-	my $key = "data1";
-	while (exists $args{$key}) {
-		push @data, parse (delete $args{$key});
-		$key++;
-	}
+		my $x_labels = parse delete $args{x_labels}
+			if exists $args{x_labels};
 
-	return error("Please supply at least a data1 argument.")
-		if ref $data[0] ne 'ARRAY';
+		my @data;
+		my $key = "data1";
+		while (exists $args{$key}) {
+			push @data, parse delete $args{$key};
+			$key++;
+		}
 
-	my $length = scalar @{$data[0]};
+		error "Please supply at least a data1 argument."
+			if ref $data[0] ne 'ARRAY';
 
-	return error("data1 empty!") if $length == 0;
+		my $length = scalar @{$data[0]};
+
+		error "data1 empty!" if $length == 0;
 
 # Validate the sizes in order to have a more friendly error.
-	if ( (not defined $x_labels) || scalar @$x_labels == 0) {
-		$x_labels = [1..$length];
-	} elsif (scalar @$x_labels != $length) {
-		return error (
-		 "Size of x_labels not the same as length of data."
-		);
-	}
-
-	my $n = 2;
-	for (@data[1..$#data]) {
-		if (scalar @$_ != $length) {
-			return error (
-			 "Size of data$n not the same as size of data1."
+		if ( (not defined $x_labels) || scalar @$x_labels == 0) {
+			$x_labels = [1..$length];
+		} elsif (scalar @$x_labels != $length) {
+			error (
+			 "Size of x_labels not the same as length of data."
 			);
 		}
-		$n++;
-	}
 
-	my $graph;
-	eval {
-		no strict 'refs';
-		require "GD/Graph/$type.pm";
-		$graph = ('GD::Graph::'.$type)->new($width, $height);
+		my $n = 2;
+		for (@data[1..$#data]) {
+			if (scalar @$_ != $length) {
+				error (
+				 "Size of data$n does not equal size of data1."
+				);
+			}
+			$n++;
+		}
+
+		my $graph;
+		eval {
+			no strict 'refs';
+			require "GD/Graph/$type.pm";
+			$graph = ('GD::Graph::'.$type)->new($width, $height);
+		}; if ($@) {
+		 error (
+		  "Could not create an instance of class GD::Graph::$type: $@"
+		 );
+		}
+
+		for my $option (keys %args) {
+			my ($value, $type) = parse ($args{$option}, $dir);
+			$args{$option}	   = $value;
+
+			if ($type == TYPE_URL) {
+				push @cleanup_files, $args{$option};
+			}
+		};
+
+		$graph->set(%args);
+
+		my $image = $graph->plot([$x_labels, @data])->png;
+		$r->header_out("Expires" => time2str(time + $expires));
+		$r->send_http_header("image/png");
+		$r->print($image);
+
+		my $cache = new IO::File ">$cached_name"
+		 or error "Could not open $cached_name for writing: $!";
+
+		binmode $cache;	# For win32 compatability.
+		print $cache $image;
+		close $cache;
 	}; if ($@) {
-		return error (
-		 "Could not create an instance of class GD::Graph::$type: $@"
-		);
+		$r->log_error (__PACKAGE__.': '.$@);
 	}
 
-	$args{$_} = parse ($args{$_}) for (keys %args);
+	if (@cleanup_files) {
+		unlink @cleanup_files or
+			$r->log_error (__PACKAGE__.': '.
+			"Could not delete files: @cleanup_files, reason: $!");
+	}
 
-	$graph->set(%args);
-
-	my $image = $graph->plot([$x_labels, @data])->png;
-	$r->header_out("Expires" => time2str(time + THIRTY_DAYS));
-	$r->send_http_header("image/png");
-	$r->print($image);
-
-	my $cache = new IO::File ">$cached_name"
-		or return error("Could not open $cached_name for writing: $!");
-
-	binmode $cache;	# For win32 compatability.
-	print $cache $image;
-	close $cache;
-
-	return 1;
+	return OK;
 }
 
 # Parse a datum into a scalar, arrayref or hashref. Using the following semi
@@ -207,9 +259,12 @@ sub handler {
 # [1,2,3,foo,bar] -- an array
 # {1,2,3,foo}     -- a hash
 # or
-# http://some/url.png -- pull a URL into a file, returning that.
-sub parse ($) {
+# http://some/url.png -- pull a URL into a file, returning that. The file will
+# be relative to a directory given as the second parameter, or /tmp if not
+# specified.
+sub parse ($;$) {
 	local $_ = shift;
+	my $dir  = shift || '/tmp';
 
 	if ($_ eq 'undef') {
 		return undef;
@@ -228,10 +283,10 @@ sub parse ($) {
 
 		my ($url, $file_name) = ($_, $_);
 		$file_name =~ s|/|\%2f|g;
-		$file_name = DIR."/".$file_name;
+		$file_name = $dir."/".$file_name;
 
 		my $file = new IO::File "> ".$file_name or
-			error ("Could not open $file_name for writing: $!");
+			error "Could not open $file_name for writing: $!";
 		binmode $file;
 		print $file get($url);
 		return $file_name;
@@ -240,9 +295,9 @@ sub parse ($) {
 	return $_;
 }
 
-# Print an error message.
+# Display an error message and throw exception.
 sub error ($) {
-	my ($message) = @_;
+	my $message = shift;
 	my $r = Apache->request;
 	$r->send_http_header("text/html");
 	$r->print(<<"EOF");
@@ -253,8 +308,33 @@ sub error ($) {
 <p>
 $message
 </body>
+</html>
 EOF
-	return 1;
+	die $message;
+}
+
+# Make a directory owned by the Apache process.
+sub makeDir ($) {
+	use File::Path;
+
+	my $dir = shift;
+	mkpath $dir;
+	chmod 0755, $dir;
+# This is necessary in cases such as when the parent Apache server is running
+# as root, but requests are handled under a different uid/gid.
+	if (my $server = Apache->can('server')) {
+		chown Apache->$server()->uid,
+		      Apache->$server()->gid, $dir;
+	}
+}
+
+# Make sure the default directory exists when the parent Apache process starts.
+# Since it is often owned by root, it has a good chance of being able to create
+# this directory.
+sub BEGIN {
+	if (!-d DIR && $Apache::Server::Starting) {
+		makeDir DIR;
+	}
 }
 
 1;
@@ -271,19 +351,24 @@ This program is Copyright (c) 2000 by Rafael Kitover. This program is free
 software; you can redistribute it and/or modify it under the same terms as Perl
 itself.
 
+=head1 ACKNOWLEDGEMENTS
+
+This module owes its existance, obviously, to the availability of the wonderful
+GD::Graph module from Martien Verbruggen.
+
+Thanks to my employer, marketingmoney.com, for allowing me to work on projects
+as free software.
+
+Thanks to Vivek Khera for the bug fixes.
+
 =head1 BUGS
 
 Probably a few.
 
 =head1 TODO
 
-Configuration of cache dirs, value of the expires header and other options via
-PerlSetEnv directives in httpd.conf.
-
 Perhaps using mod_proxy for caching entirely, or improving this scheme to be
-more intelligent.
-
-Let me know.
+more intelligent and clean up after itself.
 
 =head1 SEE ALSO
 

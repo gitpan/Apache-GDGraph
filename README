@@ -1,0 +1,96 @@
+NAME
+    Apache::GD::Graph - Generate Charts in an Apache handler.
+
+SYNOPSIS
+    In httpd.conf:
+
+            PerlModule Apache::GD::Graph
+
+            <Location /chart>
+            SetHandler      perl-script
+            PerlHandler     Apache::GD::Graph
+            # These are optional.
+            PerlSetVar      CacheDir        /var/cache/Apache::GD::Graph
+            PerlSetVar      Expires         30 # days.
+            </Location>
+
+    Then send requests to:
+
+    `http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4t
+    h,5th]&data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,g
+    reen]'
+
+DESCRIPTION
+    This is a simple Apache mod_perl handler that generates and
+    returns a png format graph based on the arguments passed in via
+    a query string. It responds with the content-type "image/png"
+    directly, and sends a Expires: header of 30 days ahead (since
+    the same query string generates the same graph, they can be
+    cached). In addition, it keeps a server-side cache under
+    /var/cache/Apache::GD::Graph .
+
+OPTIONS
+    type    Type of graph to generate, can be lines, bars, points,
+            linespoints, area, mixed, pie. For a description of
+            these, see the GD::Graph(3) manpage. Can also be one of
+            the 3d types if GD::Graph3d is installed, or anything
+            else with prefix GD::Graph::.
+
+    width   Width of graph in pixels, 400 by default.
+
+    height  Height of graph in pixels, 300 by default.
+
+    For the following, look at the plot method in the GD::Graph(3)
+    manpage.
+
+    x_labels
+            Labels used on the X axis, the first array given to the
+            plot method of GD::Graph.
+
+    dataN   Values to plot, where N is a number starting with 1. Can be
+            given any number of times with N increasing.
+
+    ALL OTHER OPTIONS are passed as a hash to the GD::Graph set
+    method using the following rules for the values:
+
+    undef   Becomes a real undef.
+
+    [one,two,3]
+            Becomes an array reference.
+
+    {one,1,two,2}
+            Becomes a hash reference.
+
+    http://somewhere/file.png
+            Is pulled into a file and the file name is passed to the
+            respective option. (Can be any scheme besides http://
+            that LWP::Simple supports.)
+
+AUTHOR
+    Rafael Kitover (caelum@debian.org)
+
+COPYRIGHT
+    This program is Copyright (c) 2000 by Rafael Kitover. This
+    program is free software; you can redistribute it and/or modify
+    it under the same terms as Perl itself.
+
+ACKNOWLEDGEMENTS
+    This module owes its existance, obviously, to the availability
+    of the wonderful GD::Graph module from Martien Verbruggen.
+
+    Thanks to my employer, marketingmoney.com, for allowing me to
+    work on projects as free software.
+
+    Thanks to Vivek Khera for the bug fixes.
+
+BUGS
+    Probably a few.
+
+TODO
+    Perhaps using mod_proxy for caching entirely, or improving this
+    scheme to be more intelligent and clean up after itself.
+
+SEE ALSO
+    the perl(1) manpage, the GD::Graph(3) manpage, the GD(3)
+    manpage,
+

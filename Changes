@@ -1,20 +1,35 @@
 Revision history for Perl extension Apache::GD::Graph.
 
-0.01	Tue Aug  1 15:40:42 2000
+0.1	Tue Aug  1 15:40:42 2000
 	- original version; created by h2xs 1.20 with options
 		-A -X -n Apache::GD::Graph
 
-0.02	Wed Aug  2	    2000
+0.2	Wed Aug  2	    2000
 	- Fixed ABSTRACT in Makefile.PL and MANIFEST.
 
-0.03	Thu Aug  3 15:30:03 PDT 2000
+0.3	Thu Aug  3 15:30:03 PDT 2000
 	- Plots y values for any number of arrays (I misunderstood the
 	  GD::Graph manpage). Fixed syntax and documentation to reflect this.
 
-0.04	Thu Aug 17 15:57:30 PDT 2000
+0.4	Thu Aug 17 15:57:30 PDT 2000
 	- Changed list of values syntax from 1,2,3... to [1,2,3]. Supports
 	  arrays for all GD::Graph options as well as hashes, urls and undef,
 	  see man page.
 	- Added better error handling.
-	- Caches under /var/cache/Apache::GD::Graph instead of /tmp/grap-<pid>
+	- Caches under /var/cache/Apache::GD::Graph instead of /tmp/graph-<pid>
 	  which was kinda silly.
+
+0.5	Sat Sep  2 21:48:18 PDT 2000
+	- Fixes from Vivek Khera
+		- Didn't create directory correctly on BSD.
+		- Use File::Path::mkpath to create directory and untaints graph
+		  type so that module is taint safe.
+		- Foreach loop syntax didn't work with 5.004.
+	- Fixed error handling again, now one eval block wrapping handler.
+	- Added PerlSetVar CacheDir and PerlSetVar Expires to control the
+	  server side cache directory and value of the Expires header in days,
+	  respectively.
+	- Deletes retrieved files after itself.
+	- Beginnings of a better test suite.
+	- Just run pod2text on the module to create README, as opposed to not
+	  having a README I guess.
