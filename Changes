@@ -39,3 +39,16 @@ Revision history for Perl extension Apache::GD::Graph.
 	  should have done in the first place.
 	- PerlSetVar CacheDir is gone (File::Cache uses its own).
 	- PerlSetVar CacheSize added (size in bytes).
+
+0.7	Wed Sep 14 18:47:27 PDT 2000
+	- Added support for image types other than png via PerlSetVar
+	  ImageType, and the image_type parameter, and via Accepts header
+	  (Thanks to Scott Holdren for the idea and patch.)
+	- Better parsing. Empty values in arrays (like [,foo,bar,,]) will work,
+	  as well as quoted strings. (Thanks to Scott Holdren for the former.)
+	- New argument "expires" allows configuration of Expires header on a
+	  request basis.
+	- New argument "cache" allows requests to not use the server-side
+	  cache.
+	- Improved error handling again.
+	- Now know how to make graphs without axes, see man page.

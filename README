@@ -12,6 +12,12 @@ SYNOPSIS
             # These are optional.
             PerlSetVar      Expires         30 # days.
             PerlSetVar      CacheSize       5242880 # 5 megs.
+            PerlSetVar      ImageType       png
+            # The default image type that graphs should be.
+            # png is default, gif requires <= GD 1.19.
+            # Any type supported by the installed version of GD will work.
+            PerlSetVar      JpegQuality     75 # 0 to 100
+            # Best not to specify this one and let GD figure it out.
             </Location>
 
     Then send requests to:
@@ -40,15 +46,25 @@ DESCRIPTION
     the client, and on the client's browser cache. Not to mention,
     chart generation is very fast.
 
-    It is implemented as a simple Apache mod_perl handler that
-    generates and returns a png format graph (using Martien
+    Graphs Without Axes
+    To generate a graph without any axes, do not specify x_labels
+    and append `y_number_format=""' to your query. Eg.
+
+            http://www.some-server.com/chart?data1=[1,2,3,4,5]&y_number_format=""
+
+    Implementation
+    This module is implemented as a simple Apache mod_perl handler
+    that generates and returns a png format graph (using Martien
     Verbruggen's GD::Graph module) based on the arguments passed in
     via a query string. It responds with the content-type
-    "image/png" directly, and sends a Expires: header of 30 days (or
-    whatever is set via `PerlSetVar Expires', in days) ahead. In
-    addition, it keeps a server-side cache in the file system using
-    DeWitt Clinton's File::Cache module, whose size can be specified
-    via `PerlSetVar CacheSize' in bytes.
+    "image/png" (or whatever is set via `PerlSetVar ImageType'), and
+    sends a Expires: header of 30 days (or whatever is set via
+    `PerlSetVar Expires', or expires in the query string, in days)
+    ahead.
+
+    In addition, it keeps a server-side cache in the file system
+    using DeWitt Clinton's File::Cache module, whose size can be
+    specified via `PerlSetVar CacheSize' in bytes.
 
 OPTIONS
     type    Type of graph to generate, can be lines, bars, points,
@@ -61,12 +77,37 @@ OPTIONS
 
     height  Height of graph in pixels, 300 by default.
 
+    expires Date of Expires header from now, in days. Same as
+            `PerlSetVar Expires'.
+
+    image_type
+            Same as `PerlSetVar ImageType'. "png" by default, but
+            can be anything supported by GD.
+
+            If not specified via this option or in the config file,
+            the image type can also be deduced from a single value
+            in the 'Accepts' header of the request.
+
+    jpeg_quality
+            Same as `PerlSetVar JpegQuality'. A number from 0 to 100
+            that determines the jpeg quality and the size. If not
+            set at all, the GD library will determine the optimal
+            setting. Changing this value doesn't seem to do much as
+            far as line graphs go, but YMMV.
+
+    cache   Boolean value which determines whether or not the image will
+            get cached server-side (for client-side caching, use the
+            "expires" parameter). It is true (1) by default. Setting
+            `PerlSetVar CacheSize 0' in the config file will achieve
+            the same affect as `cache=0' in the query string.
+
     For the following, look at the plot method in the GD::Graph(3)
     manpage.
 
     x_labels
             Labels used on the X axis, the first array given to the
-            plot method of GD::Graph.
+            plot method of GD::Graph. If unspecified or undef, no
+            labels will be drawn.
 
     dataN   Values to plot, where N is a number starting with 1. Can be
             given any number of times with N increasing.
@@ -87,6 +128,16 @@ OPTIONS
             respective option. (Can be any scheme besides http://
             that LWP::Simple supports.)
 
+    [undef,something,undef] or {key,undef}
+            You can create an array or hash with undefs.
+
+    ['foo',bar] or 'baz' or {'key','value'}
+            Single and double quoted strings are supported, either
+            as singleton values or inside arrays and hashes.
+
+            Nested arrays/hashes are not supported at this time, let
+            me know if you need them for some reason.
+
 AUTHOR
     Rafael Kitover (caelum@debian.org)
 
@@ -97,19 +148,20 @@ COPYRIGHT
 
 ACKNOWLEDGEMENTS
     This module owes its existance, obviously, to the availability
-    of the wonderful GD::Graph module from Martien Verbruggen.
+    of the wonderful GD::Graph module from Martien Verbruggen
+    <mgjv@comdyn.com.au>.
 
     Thanks to my employer, marketingmoney.com, for allowing me to
     work on projects as free software.
 
-    Thanks to Vivek Khera for the bug fixes.
+    Thanks to Vivek Khera (khera@kciLink.com) and Scott Holdren
+    <scott@monsterlabs.com> for the bug fixes.
 
 BUGS
     Probably a few.
 
 TODO
-    More extensive test suite. Need to be easily able to generate
-    graphs without axes.
+    If possible, a comprehensive test suite. Make it faster?
 
 SEE ALSO
     the perl manpage, the GD::Graph manpage, the GD manpage

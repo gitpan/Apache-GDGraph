@@ -11,7 +11,10 @@ sub BEGIN {
 }
 
 sub END {
-	print "not ok 1\n" unless $loaded;
+	if (not $loaded) {
+		print STDERR "Could not load module!\n";
+		print "not ok 1\n";
+	}
 }
 
 use Apache::GD::Graph;

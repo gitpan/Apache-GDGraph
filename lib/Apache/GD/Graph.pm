@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.6 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.7 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
@@ -18,6 +18,12 @@ In httpd.conf:
 	# These are optional.
 	PerlSetVar	Expires		30 # days.
 	PerlSetVar	CacheSize	5242880 # 5 megs.
+	PerlSetVar	ImageType	png
+	# The default image type that graphs should be.
+	# png is default, gif requires <= GD 1.19.
+	# Any type supported by the installed version of GD will work.
+	PerlSetVar	JpegQuality	75 # 0 to 100
+	# Best not to specify this one and let GD figure it out.
 	</Location>
 
 Then send requests to:
@@ -44,13 +50,25 @@ And it gets cached both server side, and along any proxies to the client, and
 on the client's browser cache. Not to mention, chart generation is
 very fast.
 
-It is implemented as a simple Apache mod_perl handler that generates and
-returns a png format graph (using Martien Verbruggen's GD::Graph module) based
-on the arguments passed in via a query string. It responds with the
-content-type "image/png" directly, and sends a Expires: header of 30 days (or
-whatever is set via C<PerlSetVar Expires>, in days) ahead. In addition, it
-keeps a server-side cache in the file system using DeWitt Clinton's File::Cache
-module, whose size can be specified via C<PerlSetVar CacheSize> in bytes.
+=item B<Graphs Without Axes>
+
+To generate a graph without any axes, do not specify x_labels and append
+C<y_number_format=""> to your query. Eg.
+
+	http://www.some-server.com/chart?data1=[1,2,3,4,5]&y_number_format=""
+
+=item B<Implementation>
+
+This module is implemented as a simple Apache mod_perl handler that generates
+and returns a png format graph (using Martien Verbruggen's GD::Graph module)
+based on the arguments passed in via a query string. It responds with the
+content-type "image/png" (or whatever is set via C<PerlSetVar ImageType>), and
+sends a Expires: header of 30 days (or whatever is set via C<PerlSetVar
+Expires>, or expires in the query string, in days) ahead.
+
+In addition, it keeps a server-side cache in the file system using DeWitt
+Clinton's File::Cache module, whose size can be specified via C<PerlSetVar
+CacheSize> in bytes.
 
 =head1 OPTIONS
 
@@ -71,6 +89,32 @@ Width of graph in pixels, 400 by default.
 
 Height of graph in pixels, 300 by default.
 
+=item B<expires>
+
+Date of Expires header from now, in days. Same as C<PerlSetVar Expires>.
+
+=item B<image_type>
+
+Same as C<PerlSetVar ImageType>. "png" by default, but can be anything
+supported by GD.
+
+If not specified via this option or in the config file, the image type can also
+be deduced from a single value in the 'Accepts' header of the request.
+
+=item B<jpeg_quality>
+
+Same as C<PerlSetVar JpegQuality>. A number from 0 to 100 that determines the
+jpeg quality and the size. If not set at all, the GD library will determine the
+optimal setting. Changing this value doesn't seem to do much as far as line
+graphs go, but YMMV.
+
+=item B<cache>
+
+Boolean value which determines whether or not the image will get cached
+server-side (for client-side caching, use the "expires" parameter). It is true
+(1) by default. Setting C<PerlSetVar CacheSize 0> in the config file will
+achieve the same affect as C<cache=0> in the query string.
+
 =back
 
 For the following, look at the plot method in L<GD::Graph(3)>.
@@ -80,7 +124,7 @@ For the following, look at the plot method in L<GD::Graph(3)>.
 =item B<x_labels>
 
 Labels used on the X axis, the first array given to the plot method of
-GD::Graph.
+GD::Graph. If unspecified or undef, no labels will be drawn.
 
 =item B<dataN>
 
@@ -111,6 +155,18 @@ Becomes a hash reference.
 Is pulled into a file and the file name is passed to the respective option.
 (Can be any scheme besides http:// that LWP::Simple supports.)
 
+=item B<[undef,something,undef] or {key,undef}>
+
+You can create an array or hash with undefs.
+
+=item B<['foo',bar] or 'baz' or {'key','value'}>
+
+Single and double quoted strings are supported, either as singleton values or
+inside arrays and hashes.
+
+Nested arrays/hashes are not supported at this time, let me know if you need
+them for some reason.
+
 =back
 
 =cut
@@ -119,11 +175,13 @@ use strict;
 use Apache;
 use Apache::Constants qw/OK/;
 use HTTP::Date;
+use GD;
 use GD::Graph;
 use File::Cache;
 
 use constant EXPIRES	=> 30;
 use constant CACHE_SIZE	=> 5242880;
+use constant IMAGE_TYPE => 'png';
 
 use constant TYPE_UNDEF		=> 0;
 use constant TYPE_SCALAR	=> 1;
@@ -131,10 +189,17 @@ use constant TYPE_ARRAY		=> 2;
 use constant TYPE_HASH		=> 3;
 use constant TYPE_URL		=> 4;
 
+use constant STRIP_QUOTES => qr/['"]?(.*)['"]?/;
+
+use constant ARRAY_OPTIONS => qw(
+	dclrs borderclrs line_types markers types
+);
+
 # Sub prototypes:
 
 sub handler ($);
 sub parse ($;$);
+sub arrayCheck ($$);
 sub error ($);
 sub makeDir ($);
 
@@ -148,33 +213,73 @@ sub handler ($) {
 	my @cleanup_files;
 
 	eval {
-# Calculate Expires header based on either the Expires configuration variable
-# (via PerlSetVar) or the EXPIRES constant, in days. Then convert into seconds
-# and round to an integer.
-		my $expires = 0+($r->dir_config('Expires')) || EXPIRES;
+		my $args = scalar $r->args;
+		my %args = ($r->args);
+
+		error <<EOF unless $args;
+Please supply arguments in the query string, see the Apache::GD::Graph man
+page for details.
+EOF
+
+# Calculate Expires header based on either an "expires" parameter, the Expires
+# configuration variable (via PerlSetVar) or the EXPIRES constant, in days.
+# Then convert into seconds and round to an integer.
+		my $expires = +$args{expires} ||
+			      +$r->dir_config('Expires') ||
+			      EXPIRES;
+
 		$expires   *= 24 * 60 * 60;
 		$expires    = sprintf ("%d", $expires);
 
-		my $image_cache = new File::Cache ( {
-			namespace	=> 'Images',
-			max_size	=> 0+($r->dir_config('CacheSize')) ||
-					   CACHE_SIZE,
-			filemode	=> 0660
-		} );
+# Determine the type of image that the graph should be.
+# Allow an Accepts: header with one specific image type to set it, a
+# PerlSetVar, or the image_type parameter.
+		my $image_type = lc($r->dir_config('ImageType')) || IMAGE_TYPE;
 
-		my $params = scalar $r->args;
-
-		if (my $cached_image = $image_cache->get($params)) {
-			$r->header_out (
-				"Expires" => time2str(time + $expires)
-			);
-			$r->send_http_header("image/png");
-			$r->print($cached_image);
-
-			return OK;
+		my $accepts_header = $r->header_in('Accepts');
+		if (defined $accepts_header and
+		    $accepts_header =~ m!^\s*image/(\w+)\s*$!) {
+			my $image_type = $1;
 		}
 
-		my %args = $r->args;
+		$image_type = $args{image_type} if $args{image_type};
+
+		$image_type = 'jpeg' if $image_type eq 'jpg';
+
+		error <<EOF unless GD::Image->can($image_type);
+The version of GD installed on this server does not support
+ImageType $image_type.
+EOF
+
+		my $jpeg_quality;
+		if ($image_type eq 'jpeg') {
+			$jpeg_quality = $args{jpeg_quality} ||
+					$r->dir_config('JpegQuality');
+		}
+
+		my $cache_size = $r->dir_config('CacheSize');
+		my $image_cache;
+
+		unless (defined $cache_size and $cache_size != 0) {
+			$image_cache = new File::Cache ( {
+				namespace	=> 'Images',
+				max_size	=> $cache_size || CACHE_SIZE,
+				filemode	=> 0660
+			} );
+
+			if (my $cached_image = $image_cache->get($args)) {
+				$r->header_out (
+					"Expires" => time2str(time + $expires)
+				);
+				$r->send_http_header("image/$image_type");
+				$r->print($cached_image);
+
+				return OK;
+			}
+		}
+
+		$image_cache = undef if exists $args{cache} and
+					not $args{cache};
 
 		my $type   = delete $args{type}   || 'lines';
 		my $width  = delete $args{width}  || 400;
@@ -183,13 +288,12 @@ sub handler ($) {
 		$type =~ m/^(\w+)$/;
 		$type = $1;	# untaint it!
 
-		my $x_labels = parse delete $args{x_labels}
-			if exists $args{x_labels};
-
 		my @data;
 		my $key = "data1";
 		while (exists $args{$key}) {
-			push @data, parse delete $args{$key};
+			my ($array) = (parse delete $args{$key});
+			arrayCheck $key, $array;
+			push @data, $array;
 			$key++;
 		}
 
@@ -197,24 +301,37 @@ sub handler ($) {
 			if ref $data[0] ne 'ARRAY';
 
 		my $length = scalar @{$data[0]};
-
 		error "data1 empty!" if $length == 0;
 
+		my ($x_labels, $x_labels_type);
+		if (exists $args{x_labels}) {
+			($x_labels, $x_labels_type) =
+				parse delete $args{x_labels};
+		} else {
+			$x_labels = undef;
+		}
+		
 # Validate the sizes in order to have a more friendly error.
-		if ( (not defined $x_labels) || scalar @$x_labels == 0) {
-			$x_labels = [1..$length];
-		} elsif (scalar @$x_labels != $length) {
-			error (
-			 "Size of x_labels not the same as length of data."
-			);
+		if (defined $x_labels) {
+			arrayCheck "x_labels" => $x_labels;
+			if (scalar @$x_labels != $length) {
+				error <<EOF;
+Size of x_labels not the same as length of data.
+EOF
+			}
+		} else {
+# If x_labels is not an array or empty, fill it with undefs.
+			for (1..$length) {
+				push @$x_labels, undef;
+			}
 		}
 
 		my $n = 2;
 		for (@data[1..$#data]) {
 			if (scalar @$_ != $length) {
-				error (
-				 "Size of data$n does not equal size of data1."
-				);
+				error <<EOF;
+Size of data$n does not equal size of data1.
+EOF
 			}
 			$n++;
 		}
@@ -225,14 +342,17 @@ sub handler ($) {
 			require "GD/Graph/$type.pm";
 			$graph = ('GD::Graph::'.$type)->new($width, $height);
 		}; if ($@) {
-		 error (
-		  "Could not create an instance of class GD::Graph::$type: $@"
-		 );
+		 error <<EOF;
+Could not create an instance of class GD::Graph::$type: $@
+EOF
 		}
 
 		for my $option (keys %args) {
 			my ($value, $type) = parse ($args{$option});
 			$args{$option}	   = $value;
+
+			arrayCheck $option, $value
+				if index (ARRAY_OPTIONS, $option) != -1;
 
 			if ($type == TYPE_URL) {
 				push @cleanup_files, $args{$option};
@@ -241,15 +361,27 @@ sub handler ($) {
 
 		$graph->set(%args);
 
-		my $image = $graph->plot([$x_labels, @data])->png;
+		my $result = $graph->plot([$x_labels, @data]);
+
+		error <<EOF if not defined $result;
+Could not create graph: @{[ $graph->error ]}
+EOF
+
+		my $image;
+		if (defined $jpeg_quality) {
+			$image = $result->jpeg($jpeg_quality);
+		} else {
+			$image = $result->$image_type();
+		}
+
 		$r->header_out("Expires" => time2str(time + $expires));
-		$r->send_http_header("image/png");
+		$r->send_http_header("image/$image_type");
 		$r->print($image);
 
-		$image_cache->set($params, $image);
+		$image_cache->set($args, $image) if defined $image_cache;
 
 	}; if ($@) {
-		$r->log_error (__PACKAGE__.': '.$@);
+		$r->log_error (__PACKAGE__.': '.$r->the_request.': '.$@);
 	}
 
 	if (@cleanup_files) {
@@ -261,31 +393,35 @@ sub handler ($) {
 	return OK;
 }
 
+# parse ($datum[, $tmp_dir])
+#
 # Parse a datum into a scalar, arrayref or hashref. Using the following semi
 # perl-like syntax:
 #
-# undef		  -- a real undef
-# foo_bar         -- a scalar
-# [1,2,3,foo,bar] -- an array
-# {1,2,3,foo}     -- a hash
+# undef			-- a real undef
+# foo_bar		-- a scalar
+# [1,2,undef,"foo",bar]	-- an array
+# {1,2,'3',foo}		-- a hash
 # or
-# http://some/url.png -- pull a URL into a file, returning that. The file will
-# be relative to a directory given as the second parameter, or /tmp if not
+# http://some/url.png	-- pull a URL into a file, returning that. The file
+# will be relative to a directory given as the second parameter, or /tmp if not
 # specified.
 sub parse ($;$) {
 	local $_ = shift;
 	my $dir  = shift || '/tmp';
 
-	if ($_ eq 'undef') {
-		return undef;
-	}
+	return (undef, TYPE_UNDEF) if $_ eq 'undef';
 
 	if (/^\[(.*)\]$/) {
-		return [ split /,/, $1 ];
+		return ([ map { $_ eq 'undef' ? undef : (/@{[STRIP_QUOTES]}/) }
+				split /,/, $1, -1
+		        ], TYPE_ARRAY);
 	}
 
 	if (/^\{(.*)\}$/) {
-		return { split /,/, $1 };
+		return ({ map { $_ eq 'undef' ? undef : (/@{[STRIP_QUOTES]}/) }
+				split /,/, $1, -1
+		        }, TYPE_HASH);
 	}
 
 	if (m!^\w+://!) {
@@ -299,24 +435,43 @@ sub parse ($;$) {
 			error "Could not open $file_name for writing: $!";
 		binmode $file;
 		print $file get($url);
-		return $file_name;
+		return ($file_name, TYPE_URL);
 	}
 
-	return $_;
+	($_) = (/@{[STRIP_QUOTES]}/);
+
+	return ($_, TYPE_SCALAR);
 }
 
+# arrayCheck ($name, $value)
+#
+# Makes sure $value is a defined array reference, otherwise calls error.
+sub arrayCheck ($$) {
+	my ($name, $value) = @_;
+	error <<EOF if !defined $value or !UNIVERSAL::isa($value, 'ARRAY');
+$name must be an array, eg. [1,2,3,5]
+EOF
+}
+
+# error ($message)
+#
 # Display an error message and throw exception.
 sub error ($) {
-	my $message = shift;
-	my $r = Apache->request;
+	my $message	= shift;
+	my $r		= Apache->request;
+	my $contact	= $r->server->server_admin;
 	$r->send_http_header("text/html");
 	$r->print(<<"EOF");
 <html>
 <head></head>
-<body>
+<body bgcolor="lightblue">
 <font color="red"><h1>Error:</h1></font>
 <p>
 $message
+<p>
+Please contact the server administrator, <a href="$contact">$contact</a> and
+inform them of the time the error occured, and anything you might have done to
+cause the error.
 </body>
 </html>
 EOF
@@ -340,12 +495,13 @@ itself.
 =head1 ACKNOWLEDGEMENTS
 
 This module owes its existance, obviously, to the availability of the wonderful
-GD::Graph module from Martien Verbruggen.
+GD::Graph module from Martien Verbruggen <mgjv@comdyn.com.au>.
 
 Thanks to my employer, marketingmoney.com, for allowing me to work on projects
 as free software.
 
-Thanks to Vivek Khera for the bug fixes.
+Thanks to Vivek Khera (khera@kciLink.com) and Scott Holdren
+<scott@monsterlabs.com> for the bug fixes.
 
 =head1 BUGS
 
@@ -353,8 +509,8 @@ Probably a few.
 
 =head1 TODO
 
-More extensive test suite.
-Need to be easily able to generate graphs without axes.
+If possible, a comprehensive test suite.
+Make it faster?
 
 =head1 SEE ALSO
 
