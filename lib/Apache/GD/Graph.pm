@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.10 $' =~ /\$ProjectVersion:\s+(\S+)/;
+$VERSION = 0.91;
 
 =head1 NAME
 
