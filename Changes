@@ -10,3 +10,11 @@ Revision history for Perl extension Apache::GD::Graph.
 0.03	Thu Aug  3 15:30:03 PDT 2000
 	- Plots y values for any number of arrays (I misunderstood the
 	  GD::Graph manpage). Fixed syntax and documentation to reflect this.
+
+0.04	Thu Aug 17 15:57:30 PDT 2000
+	- Changed list of values syntax from 1,2,3... to [1,2,3]. Supports
+	  arrays for all GD::Graph options as well as hashes, urls and undef,
+	  see man page.
+	- Added better error handling.
+	- Caches under /var/cache/Apache::GD::Graph instead of /tmp/grap-<pid>
+	  which was kinda silly.
