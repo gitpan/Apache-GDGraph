@@ -1,29 +1,32 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.9 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.10 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
-Apache::GD::Graph - Generate Charts in an Apache handler.
+Apache::GD::Graph - Generate Graphs in an Apache handler.
 
 =head1 SYNOPSIS
 
 In httpd.conf:
 
-	PerlModule Apache::GD::Graph
-
 	<Location /chart>
 	SetHandler	perl-script
-	PerlHandler	Apache::GD::Graph
+	PerlHandler	+Apache::GD::Graph
 	# These are optional.
-	PerlSetVar	Expires		30 # days.
-	PerlSetVar	CacheSize	5242880 # 5 megs.
-	PerlSetVar	ImageType	png
+	#PerlSetVar	Expires		30	# days default.
+	#PerlSetVar	CacheSize	5242880	# 5 megs default.
+	#PerlSetVar	ImageType	png	# Default.
 	# The default image type that graphs should be.
 	# png is default, gif requires <= GD 1.19.
 	# Any type supported by the installed version of GD will work.
-	PerlSetVar	JpegQuality	75 # 0 to 100
-	# Best not to specify this one and let GD figure it out.
+	#
+	# The next specifies the quality of generated JPEG images, best not to
+	# specify this one and let GD figure it out.
+	#PerlSetVar	JpegQuality	75 # 0 to 100
+	# TTFFontPath tells GD::Text where to look for true type fonts. The
+	# example here is the default value used.
+	#PerlSetVar	TTFFontPath	/usr/ttfonts:/var/ttfonts:/usr/X11R6/lib/X11/fonts/ttf/:/usr/X11R6/lib/X11/fonts/truetype/:/usr/share/fonts/truetype
 	</Location>
 
 Then send requests to:
@@ -33,12 +36,16 @@ Then send requests to:
 
 Options can also be sent as x-www-form-urlencoded data (ie., a form). This
 works better for large data sets, and allows simple charting forms to be set
-up. Parameters in the query string take precedence over a form if specified.
+up. IE, for example, does not allow query strings larger than a kilobyte.
+Parameters in the query string take precedence over a form if specified.
 
 =head1 INSTALLATION
 
 Like any other CPAN module, if you are not familiar with CPAN modules, see:
-http://www.cpan.org/doc/manual/html/pod/perlmodinstall.html .
+http://www.cpan.org/doc/manual/html/pod/perlmodinstall.html
+
+MAKE SURE TO RESTART YOUR APACHE SERVER using C<apachectl graceful> after
+upgrading this or any other Apache Perl module.
 
 =head1 DESCRIPTION
 
@@ -57,16 +64,65 @@ And it gets cached both server side, and along any proxies to the client, and
 on the client's browser cache. Not to mention, chart generation is
 very fast.
 
-Of course, more complex things will be better done directly in Perl.
+Of course, more complex things will be better done directly in your own Perl
+handlers, but this module allows a non-Perl environment to have access to the
+capabilities of GD::Graph.
 
-=item B<Graphs Without Axes>
+Another solution is to use ASP scripting with Microsoft Excel, which of course
+requires a Windows NT server and I have no idea how easy this is to do, or how
+fast.
 
-To generate a graph without any axes, do not specify x_labels and append
-C<y_number_format=""> to your query. Eg.
+There are also many other ways to connect programs with charting capabilities,
+such as GNUPlot, or rrdtool to a web server. These may or may not be
+faster/more featureful etc.
 
-	http://www.some-server.com/chart?data1=[1,2,3,4,5]&y_number_format=""
+=head1 TIPS
 
-=item B<Implementation>
+Most more complicated things depend on knowing the GD::Graph interface.
+
+Firstly, B<make sure you are not using any spaces!> If you want to pass a space in
+a parameter in a URL-encoded string, use C<%20>, in a form use a C<+>.
+
+Make sure to use C<cache=0> or C<PerlSetVar CacheSize 0> when debugging,
+otherwise you will spend hours being very confused.
+
+=head1 FONTS
+
+GD::Graph has some options that take a font description, such as title_font,
+legend_font, etc. (these map to the appropriate set_FOO methods in GD::Graph,
+see that manpage). See the TTFFontPath variable under SYNOPSIS for how to set
+the search path for fonts. MAKE SURE your fonts are readable by the user the
+Apache server runs under, this is usually "www-data" or "nobody". Otherwise
+your fonts will mysteriously fail with no notice.
+
+Sizes can be specified by using a list with the name and size. For example, if
+arial.ttf can be found somewhere in your TTFFontPath, you can do:
+
+	...title_font=(arial.ttf,20)
+
+To get a title using font Arial, in 20 points.
+
+Note that GD::Text does not parse out the names of fonts and such, you have to
+give it an actual filename, in the right case. So if using the Microsoft
+Windows core fonts, Arial Bold would be C<arialbd.ttf>. Here's an example:
+
+	http://server/chart?data1=[1,2,3,4,5]&title_font=(arialbd.ttf,20)&title=Just%20A%20Line
+
+=head1 IMAGES
+
+You can place a logo in any corner of the graph using the C<logo>,
+C<logo_resize> and C<logo_position> options. See L<GD::Graph>. If you just want
+a background image that is resized to fit your graph, see the
+C<background_image> option herein.
+
+=head1 TEXT/CAPTIONS
+
+The following GD::Graph options control placing text on the graph: title,
+x_label and y_label. L<GD::Graph> for those and related options. In addition,
+this modules allows you to use the captionN option(s), to draw arbitrary
+strings on the graph. See below.
+
+=head1 IMPLEMENTATION
 
 This module is implemented as a simple Apache mod_perl handler that generates
 and returns a png format graph (using Martien Verbruggen's GD::Graph module)
@@ -117,6 +173,35 @@ jpeg quality and the size. If not set at all, the GD library will determine the
 optimal setting. Changing this value doesn't seem to do much as far as line
 graphs go, but YMMV.
 
+=item B<background_image>
+
+Set an image as the background for the graph. You are responsible for choosing
+a sane image to go with your graph, the background should be either transparent
+or the same color you will use. This is the same as using the C<logo> parameter
+with an image of the same size as the graph, except this option will resize the
+image if necessary, making it more convenient for this purpose. The file or URL
+can be of any type your copy of GD supports.
+
+=item B<captionN>
+
+Draws a character string using a TrueType font at an arbitrary location.  Takes
+an array of C<($fgcolor,$fontname,$ptsize,$angle,$x,$y,$string)> where $fgcolor
+is the foreground color, $fontname is the name of a TTF font see L</FONTS> ,
+$ptsize is the point size, $x and $y are the coordinates, and $string is the
+actual characters to draw.
+
+N is an integer from 1 onward, like for the dataN option. This lets you specify
+multiple strings to draw.
+
+This follows exactly the GD stringTTF method, see L<GD>.
+
+Angle is in degrees, you will primarily use angle C<0> for normal left-to-right
+text. $x and $y are pixel coordinates from the upper left corner. $fontname is
+the name of a true-type font that will be found in the font path (see FONTS).
+Example:
+
+	http://isis/chart?data1=[1,2,3,4,5]&caption1=(1,arial.ttf,9,0,30,30,Hello)
+
 =item B<cache>
 
 Boolean value which determines whether or not the image will get cached
@@ -130,6 +215,11 @@ The graph will not be sent back, but instead saved to the file indicated on the
 server. Apache will need permission to write to that directory. The result will
 not be cached. This is basically the same as making an RPC call to a Perl
 process to make a graph and store it to a file.
+
+=item B<no_axes>
+
+This sets x_labels to an empty lists and sets y_number_format to "",
+effectively disabling axes labels.
 
 =back
 
@@ -200,12 +290,15 @@ use Apache;
 use Apache::Constants qw/OK/;
 use HTTP::Date;
 use GD;
+use GD::Text;
 use GD::Graph;
+use GD::Graph::colour;
 use File::Cache;
 
 use constant EXPIRES	=> 30;
 use constant CACHE_SIZE	=> 5242880;
 use constant IMAGE_TYPE => 'png';
+use constant TTF_FONT_PATH	=> '/usr/ttfonts:/var/ttfonts:/usr/X11R6/lib/X11/fonts/ttf/:/usr/X11R6/lib/X11/fonts/truetype/:/usr/share/fonts/truetype';
 
 use constant TYPE_UNDEF		=> 0;
 use constant TYPE_SCALAR	=> 1;
@@ -228,6 +321,7 @@ sub arrayCheck ($$);
 sub error ($);
 sub makeDir ($);
 sub parseURL ($;$);
+sub findFont ($);
 
 # Subs:
 
@@ -249,7 +343,7 @@ sub handler ($) {
 				} split /[=&;]/, $args, -1;
 		}
 
-		error <<EOF unless $args;
+		die <<EOF unless $args;
 Please supply arguments in the query string, see the Apache::GD::Graph man
 page for details.
 EOF
@@ -268,6 +362,12 @@ EOF
 # PerlSetVar, or the image_type parameter.
 		my $image_type = lc($r->dir_config('ImageType')) || IMAGE_TYPE;
 
+# Set the GD::Text fontpath.
+		GD::Text->font_path(
+			$r->dir_config('TTFFontPath') ||
+			TTF_FONT_PATH
+		);
+
 		my $accepts_header = $r->header_in('Accept');
 		if (defined $accepts_header and
 		    $accepts_header =~ m!^\s*image/(\w+)\s*$!) {
@@ -278,7 +378,7 @@ EOF
 
 		$image_type = 'jpeg' if $image_type eq 'jpg';
 
-		error <<EOF unless GD::Image->can($image_type);
+		die <<EOF unless GD::Image->can($image_type);
 The version of GD installed on this server does not support
 ImageType $image_type.
 EOF
@@ -291,10 +391,10 @@ EOF
 
 		my $image_cache;
 
-		unless (exists $args{cache} and $args{cache} != 0) {
+		if (not exists $args{cache} or $args{cache} != 0) {
 			my $cache_size = $r->dir_config('CacheSize');
 
-			unless (defined $cache_size and $cache_size != 0) {
+			if (defined $cache_size and $cache_size != 0) {
 				$image_cache = new File::Cache ( {
 					namespace	=> 'Images',
 					max_size	=> $cache_size ||
@@ -338,11 +438,17 @@ EOF
 			$key++;
 		}
 
-		error "Please supply at least a data1 argument."
+		die "Please supply at least a data1 argument."
 			if ref $data[0] ne 'ARRAY';
 
 		my $length = scalar @{$data[0]};
-		error "data1 empty!" if $length == 0;
+		die "data1 empty!" if $length == 0;
+
+		if (exists $args{no_axes}) {
+			delete $args{x_labels};
+			$args{y_number_format} = "";
+			delete $args{no_axes};
+		}
 
 		my ($x_labels, $x_labels_type);
 		if (exists $args{x_labels}) {
@@ -356,7 +462,7 @@ EOF
 		if (defined $x_labels) {
 			arrayCheck "x_labels" => $x_labels;
 			if (scalar @$x_labels != $length) {
-				error <<EOF;
+				die <<EOF;
 Size of x_labels not the same as length of data.
 EOF
 			}
@@ -370,7 +476,7 @@ EOF
 		my $n = 2;
 		for (@data[1..$#data]) {
 			if (scalar @$_ != $length) {
-				error <<EOF;
+				die <<EOF;
 Size of data$n does not equal size of data1.
 EOF
 			}
@@ -383,7 +489,7 @@ EOF
 			require "GD/Graph/$type.pm";
 			$graph = ('GD::Graph::'.$type)->new($width, $height);
 		}; if ($@) {
-		 error <<EOF;
+		 die <<EOF;
 Could not create an instance of class GD::Graph::$type: $@
 EOF
 		}
@@ -411,11 +517,49 @@ EOF
 
 		};
 
+# Check if background image specified.
+		if (exists $args{background_image}) {
+			my $image = new GD::Image($args{background_image});
+
+			die <<EOF if not defined $image;
+Could not open your background image: $!
+EOF
+			$graph->gd->copyResized(
+				$image, 0, 0,
+				0, 0, $width, $height,
+				$image->getBounds
+			); 
+
+			delete $args{background_image};
+		}
+
+# Check if we need to draw captions, draw them after graph is plotted.
+		my @captions;
+		$key = "caption1";
+		while (exists $args{$key}) {
+			die <<EOF unless UNIVERSAL::isa($args{$key}, 'ARRAY');
+Caption must be an array. See the Apache::GD::Graph man page or the StringTTF
+method in the GD man page for details.
+EOF
+			push @captions, $args{$key};
+			delete $args{$key};
+			$key++;
+		}
+
 		$graph->set(%args);
 
 		my $result = $graph->plot([$x_labels, @data]);
 
-		error <<EOF if not defined $result;
+# Draw captions.
+		for my $caption (@captions) {
+			undef $@;
+# Argument 2 to caption is the font name, GD expects a full path.
+			$caption->[1] = findFont($caption->[1]);
+			my @bounds = $result->stringTTF(@$caption);
+			die "Could not draw caption: @{[ join ', ', @$caption ]}: $@" if $@;
+		}
+
+		die <<EOF if not defined $result;
 Could not create graph: @{[ $graph->error ]}
 EOF
 
@@ -426,7 +570,7 @@ EOF
 			$image = $result->$image_type();
 		}
 
-		unless ($to_file) {
+		if (not $to_file) {
 			$r->header_out("Expires" => time2str(time + $expires));
 			$r->send_http_header("image/$image_type");
 			$r->print($image);
@@ -434,14 +578,14 @@ EOF
 			$image_cache->set($args, $image) if defined $image_cache;
 		} else {
 			my $destination = new IO::File ">$to_file"
-				or error "Could not writ to $to_file: $!";
+				or die "Could not writ to $to_file: $!";
 			print $destination $image;
 
 			$r->send_http_header("text/plain");
 			$r->print("Image created successfully.");
 		}
 	}; if ($@) {
-		$r->log_reason (__PACKAGE__.': '.$r->the_request.': '.$@);
+		error $@;
 	}
 
 	if (@cleanup_files) {
@@ -543,9 +687,11 @@ EOF
 
 # error ($message)
 #
-# Display an error message and throw exception.
+# Sends a page with the error message to the browser.
 sub error ($) {
 	my $message	= shift;
+# Ending newlines look ugly in the error log.
+	chomp $message;
 	my $r		= Apache->request;
 	my $contact	= $r->server->server_admin;
 	$r->send_http_header("text/html");
@@ -557,13 +703,33 @@ sub error ($) {
 <p>
 $message
 <p>
+The Request was:<br>
+@{[ $r->the_request ]}
+<p>
 Please contact the server administrator, <a href="$contact">$contact</a> and
 inform them of the time the error occured, and anything you might have done to
 cause the error.
 </body>
 </html>
 EOF
-	die $message;
+
+	$r->log_error (__PACKAGE__.': '.$r->the_request.': '.$message);
+}
+
+# findFont ($basename)
+#
+# Searches the true type font path for a file, returns the first match.
+#
+# Returns undef if no font was found.
+sub findFont ($) {
+	my $name = shift;
+	my @path = map { m!(.*?)/*$! } split /:/, GD::Text->font_path;
+
+	for my $path (@path) {
+		for my $font (<$path/*>) {
+			return $font if $font =~ m!/$name$!;
+		}
+	}
 }
 
 1;
@@ -585,7 +751,7 @@ itself.
 This module owes its existance, obviously, to the availability of the wonderful
 GD::Graph module from Martien Verbruggen <mgjv@comdyn.com.au>.
 
-Thanks to my employer, marketingmoney.com, for allowing me to work on projects
+Thanks to my employer, Gradience, Inc., for allowing me to work on projects
 as free software.
 
 Thanks to Vivek Khera (khera@kciLink.com) and Scott Holdren
@@ -595,10 +761,15 @@ Thanks to Vivek Khera (khera@kciLink.com) and Scott Holdren
 
 Probably a few.
 
+We should probably just let people set up their own PerlFixupHandlers for
+errors, but this makes it more difficult to set up. At least, it should be an
+option.
+
 =head1 TODO
 
+Boxed captions.
+Variable mapping of x-labels to data points.
 If possible, a comprehensive test suite.
-
 Make it faster?
 
 =head1 SEE ALSO

@@ -69,3 +69,17 @@ Revision history for Perl extension Apache::GD::Graph.
 	- Now support x-www-form-urlencoded data sent via a POST request.
 	- Added a to_file parameter, if set the generated graph will be saved
 	  to the destination file on the server.
+
+0.10	Tue Feb  6 16:37:56 PST 2001
+	- Added a background_image option to make it simpler to add background
+	  images to graphs.
+	- Added no_axes parameter.
+	- Added PerlSetVar TTFFontPath to set the path to search for True Type
+	  fonts in GD::Text, and consequently any font related methods in
+	  GD::Graph.
+	- Fixed another minor caching snafu (PerlSetVar CacheSize 0 still
+	  checked for cached images).
+	- Expanded pod docs a bit.
+	- Fixed exceptions, for the last time I hope.
+	- Added support for captions at arbitrary locations in the graph, with
+	  any font.
