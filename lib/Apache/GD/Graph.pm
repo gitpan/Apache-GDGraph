@@ -1,6 +1,6 @@
 package Apache::GD::Graph;
 
-($VERSION) = '$ProjectVersion: 0.8 $' =~ /\$ProjectVersion:\s+(\S+)/;
+($VERSION) = '$ProjectVersion: 0.9 $' =~ /\$ProjectVersion:\s+(\S+)/;
 
 =head1 NAME
 
@@ -31,6 +31,10 @@ Then send requests to:
 	http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&
 	data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
 
+Options can also be sent as x-www-form-urlencoded data (ie., a form). This
+works better for large data sets, and allows simple charting forms to be set
+up. Parameters in the query string take precedence over a form if specified.
+
 =head1 INSTALLATION
 
 Like any other CPAN module, if you are not familiar with CPAN modules, see:
@@ -52,6 +56,8 @@ For example, embedding a pie chart can be as simple as:
 And it gets cached both server side, and along any proxies to the client, and
 on the client's browser cache. Not to mention, chart generation is
 very fast.
+
+Of course, more complex things will be better done directly in Perl.
 
 =item B<Graphs Without Axes>
 
@@ -118,6 +124,13 @@ server-side (for client-side caching, use the "expires" parameter). It is true
 (1) by default. Setting C<PerlSetVar CacheSize 0> in the config file will
 achieve the same affect as C<cache=0> in the query string.
 
+=item B<to_file>
+
+The graph will not be sent back, but instead saved to the file indicated on the
+server. Apache will need permission to write to that directory. The result will
+not be cached. This is basically the same as making an RPC call to a Perl
+process to make a graph and store it to a file.
+
 =back
 
 For the following, look at the plot method in L<GD::Graph(3)>.
@@ -149,6 +162,12 @@ Becomes a real undef.
 
 Becomes an array reference.
 
+=item B<(one,two,3)>
+
+This becomes a list, you can pass lists to set_SOMETHING methods of GD::Graph,
+if there is no corresponding set_ method, the list will be silently converted
+to an anonymous array and used in an ordinary option.
+
 =item B<{one,1,two,2}>
 
 Becomes a hash reference.
@@ -167,8 +186,10 @@ You can create an array or hash with undefs.
 Single and double quoted strings are supported, either as singleton values or
 inside arrays and hashes.
 
-Nested arrays/hashes are not supported at this time, let me know if you need
-them for some reason.
+DON'T USE SPACES, this is a common mistake. A space in a URL-encoded string is
+%20, or a + in a form.
+
+Nested structures are still not supported, maybe later.
 
 =back
 
@@ -191,6 +212,7 @@ use constant TYPE_SCALAR	=> 1;
 use constant TYPE_ARRAY		=> 2;
 use constant TYPE_HASH		=> 3;
 use constant TYPE_URL		=> 4;
+use constant TYPE_LIST		=> 5;
 
 use constant STRIP_QUOTES => qr/['"]?(.*)['"]?/;
 
@@ -205,6 +227,7 @@ sub parse ($;$);
 sub arrayCheck ($$);
 sub error ($);
 sub makeDir ($);
+sub parseURL ($;$);
 
 # Subs:
 
@@ -218,6 +241,13 @@ sub handler ($) {
 	eval {
 		my $args = scalar $r->args;
 		my %args = ($r->args);
+
+		unless ($args) {
+			$args = $r->content;
+			%args = map {
+					Apache::unescape_url_info($_)
+				} split /[=&;]/, $args, -1;
+		}
 
 		error <<EOF unless $args;
 Please supply arguments in the query string, see the Apache::GD::Graph man
@@ -299,7 +329,10 @@ EOF
 		my @data;
 		my $key = "data1";
 		while (exists $args{$key}) {
-			my ($array) = (parse delete $args{$key});
+			my ($type, $array, @rest) = (parse delete $args{$key});
+			if ($type == TYPE_LIST) {
+				$array = [ $array, @rest ];
+			}
 			arrayCheck $key, $array;
 			push @data, $array;
 			$key++;
@@ -314,7 +347,7 @@ EOF
 		my ($x_labels, $x_labels_type);
 		if (exists $args{x_labels}) {
 			($x_labels, $x_labels_type) =
-				parse delete $args{x_labels};
+				(parse delete $args{x_labels})[1];
 		} else {
 			$x_labels = undef;
 		}
@@ -355,9 +388,19 @@ Could not create an instance of class GD::Graph::$type: $@
 EOF
 		}
 
+		my $to_file = delete $args{to_file};
+
 		for my $option (keys %args) {
-			my ($value, $type) = parse ($args{$option});
-			$args{$option}	   = $value;
+			my ($type, $value, @rest) = parse ($args{$option});
+
+			if (my $method = $graph->can("set_$option")) {
+				$graph->$method($value, @rest);
+			} else {
+				if ($type == TYPE_LIST) {
+					$value = [ $value, @rest ];
+				}
+				$args{$option} = $value;
+			}
 
 			arrayCheck $option, $value
 				if index (ARRAY_OPTIONS, $option) != -1;
@@ -366,9 +409,6 @@ EOF
 				push @cleanup_files, $args{$option};
 			}
 
-			if (my $method = $graph->can("set_$option")) {
-				$graph->$method($value);
-			}
 		};
 
 		$graph->set(%args);
@@ -386,20 +426,32 @@ EOF
 			$image = $result->$image_type();
 		}
 
-		$r->header_out("Expires" => time2str(time + $expires));
-		$r->send_http_header("image/$image_type");
-		$r->print($image);
+		unless ($to_file) {
+			$r->header_out("Expires" => time2str(time + $expires));
+			$r->send_http_header("image/$image_type");
+			$r->print($image);
 
-		$image_cache->set($args, $image) if defined $image_cache;
+			$image_cache->set($args, $image) if defined $image_cache;
+		} else {
+			my $destination = new IO::File ">$to_file"
+				or error "Could not writ to $to_file: $!";
+			print $destination $image;
 
+			$r->send_http_header("text/plain");
+			$r->print("Image created successfully.");
+		}
 	}; if ($@) {
 		$r->log_reason (__PACKAGE__.': '.$r->the_request.': '.$@);
 	}
 
 	if (@cleanup_files) {
-		unlink @cleanup_files or
-			$r->log_error (__PACKAGE__.': '.
-			"Could not delete files: @cleanup_files, reason: $!");
+		my %unique; @unique{@cleanup_files} = ();
+
+		for (keys %unique) {
+			unlink $_ or
+				$r->log_error (__PACKAGE__.': '.
+				"Could not delete $_, reason: $!");
+		}
 	}
 
 	return OK;
@@ -413,6 +465,7 @@ EOF
 # undef			-- a real undef
 # foo_bar		-- a scalar
 # [1,2,undef,"foo",bar]	-- an array
+# [3,4,undef,"baz"]	-- a list
 # {1,2,'3',foo}		-- a hash
 # or
 # http://some/url.png	-- pull a URL into a file, returning that. The file
@@ -422,19 +475,38 @@ sub parse ($;$) {
 	local $_ = shift;
 	my $dir  = shift || '/tmp';
 
-	return (undef, TYPE_UNDEF) if $_ eq 'undef';
+	return (TYPE_UNDEF, undef) if $_ eq 'undef';
 
 	if (/^\[(.*)\]$/) {
-		return ([ map { $_ eq 'undef' ? undef : (/@{[STRIP_QUOTES]}/) }
+		return (TYPE_ARRAY, [ map { $_ eq 'undef' ? undef : (parseURL $_, $dir)[1] }
 				split /,/, $1, -1
-		        ], TYPE_ARRAY);
+		        ]);
 	}
 
 	if (/^\{(.*)\}$/) {
-		return ({ map { $_ eq 'undef' ? undef : (/@{[STRIP_QUOTES]}/) }
+		return (TYPE_HASH, { map { $_ eq 'undef' ? undef : (parseURL $_, $dir)[1] }
 				split /,/, $1, -1
-		        }, TYPE_HASH);
+		        });
 	}
+
+	if (/^\((.*)\)$/) {
+		return (TYPE_LIST, map { $_ eq 'undef' ? undef : (parseURL $_, $dir)[1] }
+				split /,/, $1, -1
+		       );
+	}
+
+	return parseURL $_, $dir;
+}
+
+# parseURL ($value)
+#
+# First strips quotes off the ends of $value.  Then checks whether $value is a
+# URL, and if so, fetches it into a file and returns the (TYPE_URL, file_name),
+# otherwise returns (TYPE_SCALAR, $value).
+sub parseURL ($;$) {
+	$_	= shift;
+	my $dir	= shift || '/tmp';
+	($_) = (/@{[STRIP_QUOTES]}/);
 
 	if (m!^\w+://!) {
 		use LWP::Simple;
@@ -446,13 +518,17 @@ sub parse ($;$) {
 		my $file = new IO::File "> ".$file_name or
 			error "Could not open $file_name for writing: $!";
 		binmode $file;
-		print $file get($url);
-		return ($file_name, TYPE_URL);
+		my $contents = get($url);
+
+		error <<EOF unless defined $contents;
+Could not retrieve data from: $url
+EOF
+
+		print $file $contents;
+		return (TYPE_URL, $file_name);
+	} else {
+		return (TYPE_SCALAR, $_);
 	}
-
-	($_) = (/@{[STRIP_QUOTES]}/);
-
-	return ($_, TYPE_SCALAR);
 }
 
 # arrayCheck ($name, $value)

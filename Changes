@@ -62,3 +62,10 @@ Revision history for Perl extension Apache::GD::Graph.
 	  header.
 	- Now checking for set_XXX methods as options, so methods like
 	  set_legend(), set_font(), etc will work.
+
+0.9	Tue Oct 17 11:38:53 PDT 2000
+	- Added a list type () for set_XXX methods. Eg. legend=(mon,tue,wed)
+	  will now work.
+	- Now support x-www-form-urlencoded data sent via a POST request.
+	- Added a to_file parameter, if set the generated graph will be saved
+	  to the destination file on the server.

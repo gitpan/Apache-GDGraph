@@ -25,6 +25,11 @@ SYNOPSIS
             http://www.server.com/chart?type=lines&x_labels=[1st,2nd,3rd,4th,5th]&
             data1=[1,2,3,4,5]&data2=[6,7,8,9,10]&dclrs=[blue,yellow,green]>
 
+    Options can also be sent as x-www-form-urlencoded data (ie., a
+    form). This works better for large data sets, and allows simple
+    charting forms to be set up. Parameters in the query string take
+    precedence over a form if specified.
+
 INSTALLATION
     Like any other CPAN module, if you are not familiar with CPAN
     modules, see:
@@ -46,6 +51,9 @@ DESCRIPTION
     And it gets cached both server side, and along any proxies to
     the client, and on the client's browser cache. Not to mention,
     chart generation is very fast.
+
+    Of course, more complex things will be better done directly in
+    Perl.
 
     Graphs Without Axes
     To generate a graph without any axes, do not specify x_labels
@@ -102,6 +110,13 @@ OPTIONS
             `PerlSetVar CacheSize 0' in the config file will achieve
             the same affect as `cache=0' in the query string.
 
+    to_file The graph will not be sent back, but instead saved to the
+            file indicated on the server. Apache will need
+            permission to write to that directory. The result will
+            not be cached. This is basically the same as making an
+            RPC call to a Perl process to make a graph and store it
+            to a file.
+
     For the following, look at the plot method in the GD::Graph(3)
     manpage.
 
@@ -122,6 +137,12 @@ OPTIONS
     [one,two,3]
             Becomes an array reference.
 
+    (one,two,3)
+            This becomes a list, you can pass lists to set_SOMETHING
+            methods of GD::Graph, if there is no corresponding set_
+            method, the list will be silently converted to an
+            anonymous array and used in an ordinary option.
+
     {one,1,two,2}
             Becomes a hash reference.
 
@@ -137,8 +158,10 @@ OPTIONS
             Single and double quoted strings are supported, either
             as singleton values or inside arrays and hashes.
 
-            Nested arrays/hashes are not supported at this time, let
-            me know if you need them for some reason.
+            DON'T USE SPACES, this is a common mistake. A space in a
+            URL-encoded string is %20, or a + in a form.
+
+            Nested structures are still not supported, maybe later.
 
 AUTHOR
     Rafael Kitover (caelum@debian.org)
